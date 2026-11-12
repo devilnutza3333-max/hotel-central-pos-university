@@ -1,0 +1,26 @@
+HOTEL CENTRAL POS — CPU PATCH V1 — LOCAL TEST REPORT
+วันที่ 12 พฤศจิกายน 2569
+
+สาเหตุจาก Cloudflare Dashboard:
+  Exceeded CPU Time Limits = 246
+  Exceeded Memory = 0, Uncaught Exception = 0
+  Active deployment = 109aef7a (ก่อนแก้ไข)
+
+ผลตรวจในสภาพแวดล้อมท้องถิ่น:
+  [PASS] โครงสร้าง source ZIP เดิมสมบูรณ์ 173 รายการ
+  [PASS] TypeScript parser ตรวจ .ts/.tsx 114 ไฟล์: 0 syntax errors
+  [PASS] Node static regression 5 tests: 5 passed
+  [PASS] SQLite simulation: 100 orders = 200 valid items, 1000 orders = 304 valid items
+  [PASS] D1 migration .sql 15 ไฟล์ SHA-256 เหมือนต้นฉบับ
+  [PASS] Source code เปลี่ยนเฉพาะ app/api/pos/route.ts และ app/pos-app.tsx จากต้นฉบับ
+  [PASS] ไม่พบ .env, .dev.vars, .pem, .key ในโฟลเดอร์ที่แพ็ก
+  [BLOCKED] npm run build: ERR_MODULE_NOT_FOUND vinext; โฟลเดอร์ node_modules ไม่มี
+  [BLOCKED] ติดตั้งแพ็กเกจ: ไม่สามารถเชื่อมต่อ registry.npmjs.org (EAI_AGAIN)
+  [NOT RUN] Integration test / POS feature / Cloudflare Workers staging/production
+  [NOT RUN] CPU performance benchmark บน Workers Free
+
+สำคัญ: การผ่าน static test และ SQL mock ไม่ยืนยันว่า Error 1102 จะหายบนระบบจริง
+ขั้นตอนถัดไป: แตก ZIP บน Windows ที่ติดตั้ง Node.js 22+ แล้วดับเบิลคลิก TEST-WINDOWS.cmd
+ถ้าขึ้น SUCCESS จึงเริ่มวางแผนสร้าง staging แยกจาก production โดยต้องสำรอง D1 ก่อน Deploy
+
+ข้อห้าม: ไม่ Deploy ทับ production และไม่ Execute migration ใน production โดยไม่ได้ backup
