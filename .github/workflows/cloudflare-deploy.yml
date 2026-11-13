@@ -50,6 +50,39 @@ jobs:
       - name: Build Cloudflare Worker
         run: pnpm run build
 
+      # vinext/Vite can emit the same DB binding more than once when merging
+      # Wrangler and Vite configs. Keep one only if all entries match the
+      # pre-existing experimental database; refuse unexpected bindings.
+      - name: Normalize generated D1 bindings safely
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from "node:fs";
+          const path = "dist/server/wrangler.json";
+          const conf = JSON.parse(fs.readFileSync(path, "utf8"));
+          const entries = conf.d1_databases;
+          const expected = {
+            binding: "DB",
+            database_name: "hotel-central-pos-db",
+            database_id: "bf87916e-6755-4a4b-8916-ad7a709c573b",
+          };
+          if (!Array.isArray(entries) || entries.length === 0) {
+            console.error("STOP: generated Worker config contains no D1 bindings.");
+            process.exit(1);
+          }
+          if (!entries.every(item =>
+            item.binding === expected.binding &&
+            item.database_name === expected.database_name &&
+            item.database_id === expected.database_id
+          )) {
+            console.error("STOP: D1 bindings differ from the expected experimental database. No deployment.");
+            console.error(entries.map(({ binding, database_name, database_id }) => ({ binding, database_name, database_id })));
+            process.exit(1);
+          }
+          conf.d1_databases = [entries[0]];
+          fs.writeFileSync(path, JSON.stringify(conf, null, 2) + "\n");
+          console.log(`Verified and normalized ${entries.length} identical D1 DB binding(s) to one.`);
+          NODE
+
       - name: Verify deployment target and existing D1 binding
         run: |
           node --input-type=module <<'NODE'
