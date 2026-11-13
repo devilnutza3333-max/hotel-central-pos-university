@@ -79,8 +79,17 @@ jobs:
             process.exit(1);
           }
           conf.d1_databases = [entries[0]];
+          // Build tooling may merge the same runtime compatibility flag twice.
+          // Cloudflare rejects repeated flags with validation error 10021.
+          const flags = conf.compatibility_flags ?? [];
+          if (!Array.isArray(flags) || flags.some(flag => typeof flag !== "string" || !flag)) {
+            console.error("STOP: invalid generated compatibility flags.");
+            process.exit(1);
+          }
+          conf.compatibility_flags = [...new Set(flags)];
           fs.writeFileSync(path, JSON.stringify(conf, null, 2) + "\n");
           console.log(`Verified and normalized ${entries.length} identical D1 DB binding(s) to one.`);
+          console.log(`Normalized compatibility flags from ${flags.length} to ${conf.compatibility_flags.length}: ${conf.compatibility_flags.join(", ")}`);
           NODE
 
       - name: Verify deployment target and existing D1 binding
