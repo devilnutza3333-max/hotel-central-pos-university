@@ -62,6 +62,20 @@ export default defineConfig(async ({ command }) => {
         inspectorPort: false,
         config: {
           ...localBindingConfig,
+          ...(command === "build"
+            ? {
+                name: "hotel-central-pos-university",
+                compatibility_date: "2026-05-15",
+                keep_vars: true,
+                d1_databases: [
+                  {
+                    binding: "DB",
+                    database_name: "hotel-central-pos-db",
+                    database_id: "bf87916e-6755-4a4b-8916-ad7a709c573b",
+                  },
+                ],
+              }
+            : {}),
           ...(command === "serve"
             ? {
                 services: [
