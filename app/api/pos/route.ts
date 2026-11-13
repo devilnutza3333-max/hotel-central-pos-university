@@ -299,6 +299,13 @@ export async function GET(request: Request) {
   const db = getDb();
   const management = managementRoles.has(profile.role);
   const scope = new URL(request.url).searchParams.get("scope") ?? "tables";
+  // Operational screens only need open orders. Keep closed history for reports.
+  // Excluding paid/refunded rows prevents materializing older orders and items
+  // every 12 seconds on the most frequently polled views.
+  const includeClosedOrderHistory = ["finance", "dashboard", "audit", "operations", "readiness"].includes(scope);
+  const orderFilter = includeClosedOrderHistory
+    ? ne(orders.status, "void")
+    : inArray(orders.status, [...activeOrderStatuses]);
   const dutyAccess = await loadDutyAccess(profile.id);
   const dutyStations = dutyAccess.stations;
   const finance = paymentRoles.has(profile.role) || dutyStations.has("cashier_trainee");
@@ -335,15 +342,21 @@ export async function GET(request: Request) {
     db.select({ menuItemId: menuImages.menuItemId, updatedAt: menuImages.updatedAt }).from(menuImages),
     needsUsers || needsFinance || needsPrint ? db.select().from(users).orderBy(desc(users.lastSeenAt)) : Promise.resolve([]),
     needsUsers ? db.select({ userId: authAccounts.userId, username: authAccounts.username }).from(authAccounts) : Promise.resolve([]),
-    db.select().from(orders).where(ne(orders.status, "void")).orderBy(desc(orders.updatedAt)).limit(scope === "finance" ? 1000 : 100),
+    db.select().from(orders).where(orderFilter).orderBy(desc(orders.updatedAt)).limit(scope === "finance" ? 1000 : 100),
     needsAudit ? db.select().from(auditLogs).orderBy(desc(auditLogs.createdAt)).limit(scope === "audit" ? 500 : scope === "readiness" ? 150 : 30) : Promise.resolve([]),
     needsInventory ? db.select().from(inventoryItems).orderBy(asc(inventoryItems.name)) : Promise.resolve([]),
     needsMenuAdmin ? db.select().from(menuRecipes) : Promise.resolve([]),
     management && scope === "inventory" ? db.select().from(stockMovements).orderBy(desc(stockMovements.createdAt)).limit(80) : Promise.resolve([]),
     needsInventory ? db.select().from(stockReceipts).orderBy(desc(stockReceipts.receivedAt)).limit(500) : Promise.resolve([]),
-    needsInventory ? db.select().from(stockReceiptItems) : Promise.resolve([]),
+    needsInventory ? db.select().from(stockReceiptItems).where(inArray(
+      stockReceiptItems.receiptId,
+      db.select({ id: stockReceipts.id }).from(stockReceipts).orderBy(desc(stockReceipts.receivedAt)).limit(500),
+    )) : Promise.resolve([]),
     needsStockCount ? db.select().from(stockCountSessions).orderBy(desc(stockCountSessions.serviceDate)).limit(60) : Promise.resolve([]),
-    needsStockCount ? db.select().from(stockCountLines) : Promise.resolve([]),
+    needsStockCount ? db.select().from(stockCountLines).where(inArray(
+      stockCountLines.sessionId,
+      db.select({ id: stockCountSessions.id }).from(stockCountSessions).orderBy(desc(stockCountSessions.serviceDate)).limit(60),
+    )) : Promise.resolve([]),
     deliveryAccess
       ? db.select().from(deliveryOrders).orderBy(desc(deliveryOrders.createdAt)).limit(100)
       : Promise.resolve([]),
@@ -369,7 +382,7 @@ export async function GET(request: Request) {
         ne(orderItems.status, "void"),
         inArray(orderItems.orderId,
           db.select({ id: orders.id }).from(orders)
-            .where(ne(orders.status, "void"))
+            .where(orderFilter)
             .orderBy(desc(orders.updatedAt))
             .limit(scope === "finance" ? 1000 : 100),
         ),
