@@ -1,5 +1,5 @@
 name: Prepare Hotel POS Cloudflare Configuration
-:on:
+on:
   push:
     paths:
       - '.github/workflows/prepare-cloudflare.yml'
