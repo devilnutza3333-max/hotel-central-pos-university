@@ -1,0 +1,85 @@
+name: Deploy experimental Hotel Central POS to Cloudflare
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "app/**"
+      - "worker/**"
+      - "db/**"
+      - "drizzle/**"
+      - "scripts/**"
+      - "tests/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "vite.config.ts"
+      - "wrangler.jsonc"
+      - ".github/workflows/cloudflare-deploy.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hotel-pos-cloudflare
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.25.0
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run POS regression tests
+        run: node --test tests/cpu-patch.test.mjs tests/snapshot-scope.test.mjs
+
+      - name: Build Cloudflare Worker
+        run: pnpm run build
+
+      - name: Verify deployment target and existing D1 binding
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from "node:fs";
+          const conf = JSON.parse(fs.readFileSync("dist/server/wrangler.json", "utf8"));
+          const d1 = conf.d1_databases?.find(item => item.binding === "DB");
+          const correctName = conf.name === "hotel-central-pos-university";
+          const correctDb = d1?.database_name === "hotel-central-pos-db"
+            && d1?.database_id === "bf87916e-6755-4a4b-8916-ad7a709c573b";
+          if (!correctName || !correctDb) {
+            console.error("STOP: Worker target or D1 binding differs from the existing test system.");
+            process.exit(1);
+          }
+          console.log("Validated existing experimental Worker and D1 binding.");
+          NODE
+
+      - name: Confirm Cloudflare credentials
+        shell: bash
+        run: |
+          if [[ -z "$CLOUDFLARE_API_TOKEN" || -z "$CLOUDFLARE_ACCOUNT_ID" ]]; then
+            echo "::error title=One-time Cloudflare connection required::Set GitHub Actions Secrets CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID. Do not paste tokens into chat or commit them to Git."
+            exit 1
+          fi
+
+      - name: Deploy updated POS to existing Cloudflare Worker
+        run: pnpm exec wrangler deploy --config dist/server/wrangler.json
+
+      - name: Deployment summary
+        run: |
+          echo "Deployed Hotel Central POS to existing Worker: hotel-central-pos-university" >> "$GITHUB_STEP_SUMMARY"
+          echo "Bound to existing experimental D1: hotel-central-pos-db" >> "$GITHUB_STEP_SUMMARY"
+          echo "No database deletion, initialization or migration was run by this workflow." >> "$GITHUB_STEP_SUMMARY"
+          echo "Test POS workflows and Cloudflare CPU error metrics after deploy." >> "$GITHUB_STEP_SUMMARY"
