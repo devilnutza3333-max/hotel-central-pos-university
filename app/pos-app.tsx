@@ -332,9 +332,13 @@ export default function PosApp({ signedInUser }: { signedInUser: { id: string; n
     let polling = false;
     const refresh = async () => {
       if (document.visibilityState !== "visible" || polling) return;
+      // Finance and audit contain historical snapshots. A tables-only poll would
+      // overwrite those reports with the shorter active-order window.
+      // Keep them stable until the user taps the existing Refresh button.
+      if (["finance", "audit"].includes(viewRef.current)) return;
       polling = true;
       try {
-        await load(true, true, ["finance", "audit"].includes(viewRef.current) ? "tables" : undefined);
+        await load(true, true);
       } finally {
         polling = false;
       }
