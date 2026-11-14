@@ -24,5 +24,15 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Run existing and new POS regression checks
         run: node --test tests/cpu-patch.test.mjs tests/snapshot-scope.test.mjs tests/live-refresh-lite.test.mjs
-      - name: Build without deploying Cloudflare
+      - name: Build original Worker (no deployment)
         run: pnpm run build
+      - name: Compile original React POS UI to static pages
+        run: pnpm run build:spa
+      - name: Join static UI with existing POS Worker
+        run: pnpm run attach:spa
+      - name: Verify static pages, backend routes, DB target
+        run: node --test tests/static-spa-build.test.mjs
+      - name: Report bundle files only
+        run: |
+          ls -lh dist/spa/index.html dist/spa/login/index.html dist/server/wrangler.json
+          node -e 'let x=require("./dist/server/wrangler.json"); console.log(JSON.stringify({name:x.name,assets:x.assets,d1_bindings:x.d1_databases?.map(b=>b.binding)},null,2))'
