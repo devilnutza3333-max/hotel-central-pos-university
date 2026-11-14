@@ -19,8 +19,16 @@ const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
 if (config.name !== "hotel-central-pos-university") throw new Error("Unexpected Worker target");
 const expectedD1 = "bf87916e-6755-4a4b-8916-ad7a709c573b";
 const bindings = config.d1_databases ?? [];
-if (!bindings.length || !bindings.every((b) => b.binding === "DB" && b.database_id === expectedD1)) {
+if (!bindings.length || !bindings.every((b) =>
+  b.binding === "DB" && b.database_id === expectedD1 && b.database_name === "hotel-central-pos-db"
+)) {
   throw new Error("D1 target mismatch - refusing to build static shell bundle");
+}
+// Vinext can duplicate the SAME binding while combining Vite/Wrangler configs.
+// Cloudflare rejects duplicate DB binding names. Keep the existing single target.
+config.d1_databases = [bindings[0]];
+if (Array.isArray(config.compatibility_flags)) {
+  config.compatibility_flags = [...new Set(config.compatibility_flags)];
 }
 
 // Keep original framework files for other existing SSR pages, QR endpoints and
@@ -37,9 +45,12 @@ if (oldDir) {
 }
 
 config.assets = {
+  ...config.assets,
   directory: path.relative(configDir, spaDir).replaceAll(path.sep, "/"),
   // Asset first. Calls to /api/* have no matching file and reach the Worker;
   // if missing, all other original server routes also reach the Worker.
+  // Keep original ASSETS binding and leave unmatched server routes intact.
+  not_found_handling: "none",
   run_worker_first: false,
 };
 fs.writeFileSync(configPath, JSON.stringify(config, null, 2) + "\n");
