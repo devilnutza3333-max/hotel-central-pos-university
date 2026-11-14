@@ -32,6 +32,8 @@ jobs:
         run: pnpm run attach:spa
       - name: Verify static pages, backend routes, DB target
         run: node --test tests/static-spa-build.test.mjs
+      - name: Smoke-test POS HTML, login, and authenticated-only API (local only)
+        run: node scripts/smoke-free-tier.mjs
       - name: Report bundle files only
         run: |
           ls -lh dist/spa/index.html dist/spa/login/index.html dist/server/wrangler.json
