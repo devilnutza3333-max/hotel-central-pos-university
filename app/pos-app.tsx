@@ -249,10 +249,10 @@ export default function PosApp({ signedInUser }: { signedInUser: { id: string; n
 
   useEffect(() => { soundPlayRef.current = sound.play; }, [sound.play]);
 
-  const load = useCallback(async (quiet = false, announce = false, scopeOverride?: View) => {
+  const load = useCallback(async (quiet = false, announce = false, scopeOverride?: View, mode: "full" | "live" = "full") => {
     if (!quiet) setLoading(true);
     try {
-      const response = await fetch(`/api/pos?scope=${encodeURIComponent(scopeOverride ?? viewRef.current)}`, { cache: "no-store" });
+      const response = await fetch(`/api/pos?scope=${encodeURIComponent(scopeOverride ?? viewRef.current)}${mode === "live" ? "&mode=live" : ""}`, { cache: "no-store" });
       const responseText = await response.text();
       const payload = parseApiResponse<SnapshotResponse>(response, responseText);
       if (!response.ok) throw new Error(payload.error ?? "โหลดข้อมูลไม่สำเร็จ");
@@ -338,7 +338,7 @@ export default function PosApp({ signedInUser }: { signedInUser: { id: string; n
       if (["finance", "audit"].includes(viewRef.current)) return;
       polling = true;
       try {
-        await load(true, true);
+        await load(true, true, undefined, "live");
       } finally {
         polling = false;
       }
@@ -346,7 +346,19 @@ export default function PosApp({ signedInUser }: { signedInUser: { id: string; n
     const onVisible = () => {
       if (document.visibilityState === "visible") void refresh();
     };
-    const timer = window.setInterval(() => void refresh(), 12000);
+    // Keep the kitchen/bar/service screens responsive; poll administration and
+    // less time-sensitive views less frequently. No visual or feature removal.
+    // The timer itself is local: only a completed refresh invokes the Worker.
+    let lastRefreshAt = 0;
+    const scheduledRefresh = () => {
+      const scope = viewRef.current;
+      const fastScreen = ["kitchen", "bar", "service", "host", "delivery"].includes(scope);
+      const interval = fastScreen ? 12_000 : 30_000;
+      if (Date.now() - lastRefreshAt < interval) return;
+      lastRefreshAt = Date.now();
+      void refresh();
+    };
+    const timer = window.setInterval(scheduledRefresh, 12_000);
     document.addEventListener("visibilitychange", onVisible);
     return () => {
       window.clearTimeout(initialLoad);
