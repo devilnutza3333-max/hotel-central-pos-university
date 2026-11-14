@@ -1,0 +1,34 @@
+name: Test 30 virtual students (isolated database, read-only live)
+on:
+  push:
+    branches: [test/virtual-classroom-users-20261114]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: virtual-classroom-tests
+  cancel-in-progress: false
+jobs:
+  virtual-classroom:
+    runs-on: ubuntu-latest
+    timeout-minutes: 22
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.25.0
+      - name: Install source dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Build original API and app
+        run: pnpm run build
+      - name: Build original POS as static UI
+        run: pnpm run build:spa
+      - name: Assemble static assets and original Worker
+        run: pnpm run attach:spa
+      - name: Verify build
+        run: node --test tests/static-spa-build.test.mjs tests/live-refresh-lite.test.mjs
+      - name: Run 30-user isolated classroom load and safe live static tests
+        run: node scripts/test-virtual-classroom-users.mjs
