@@ -13,7 +13,7 @@ test("uses the same production Worker and D1; never changes the database", () =>
   assert.equal(conf.d1_databases[0].binding, "DB");
   assert.equal(conf.d1_databases[0].database_id, "bf87916e-6755-4a4b-8916-ad7a709c573b");
   assert.equal(conf.assets.run_worker_first, false);
-  assert.equal(conf.assets.not_found_handling, undefined);
+  assert.equal(conf.assets.not_found_handling, "none");
 });
 
 test("same original HTML/React UI loaded as static files without Next SSR", () => {
