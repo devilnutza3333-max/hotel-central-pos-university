@@ -255,6 +255,11 @@ export default function PosApp({ signedInUser }: { signedInUser: { id: string; n
       const response = await fetch(`/api/pos?scope=${encodeURIComponent(scopeOverride ?? viewRef.current)}${mode === "live" ? "&mode=live" : ""}`, { cache: "no-store" });
       const responseText = await response.text();
       const payload = parseApiResponse<SnapshotResponse>(response, responseText);
+      if (response.status === 401) {
+        // Static HTML is public, but all POS data/actions stay protected by API auth.
+        window.location.replace("/login?return_to=%2F");
+        return;
+      }
       if (!response.ok) throw new Error(payload.error ?? "โหลดข้อมูลไม่สำเร็จ");
       const previous = snapshotRef.current;
       const next: Snapshot = {
