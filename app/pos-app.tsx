@@ -331,7 +331,7 @@ export default function PosApp({ signedInUser }: { signedInUser: { id: string; n
     // This reduces needless Worker CPU consumption on idle devices.
     let polling = false;
     const refresh = async () => {
-      if (document.visibilityState !== "visible" || polling) return;
+      if (document.visibilityState !== "visible" || polling || !snapshotRef.current) return;
       // Finance and audit contain historical snapshots. A tables-only poll would
       // overwrite those reports with the shorter active-order window.
       // Keep them stable until the user taps the existing Refresh button.
