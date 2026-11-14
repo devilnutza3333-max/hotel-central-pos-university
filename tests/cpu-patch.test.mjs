@@ -18,8 +18,9 @@ test('snapshot order items query is scoped by order IDs rather than all-history'
 });
 
 test('polling waits 12 seconds and skips hidden tabs / duplicate polling', () => {
-  assert.match(ui, /setInterval\(\(\) => void refresh\(\), 12000\)/);
-  assert.match(ui, /document\.visibilityState !== "visible" \|\| polling/);
+  assert.match(ui, /setInterval\(scheduledRefresh, 12_000\)/);
+  assert.match(ui, /const interval = fastScreen \? 12_000 : 30_000/);
+  assert.match(ui, /document\.visibilityState !== "visible" \|\| polling \|\| !snapshotRef\.current/);
   assert.match(ui, /document\.addEventListener\("visibilitychange", onVisible\)/);
   assert.match(ui, /document\.removeEventListener\("visibilitychange", onVisible\)/);
 });

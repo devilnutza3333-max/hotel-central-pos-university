@@ -92,6 +92,21 @@ jobs:
           console.log(`Normalized compatibility flags from ${flags.length} to ${conf.compatibility_flags.length}: ${conf.compatibility_flags.join(", ")}`);
           NODE
 
+      # Reuse the exact original POS React UI, but deliver the interactive
+      # shell and login as Cloudflare Static Assets (zero Worker CPU on load).
+      # API, remaining server routes and existing D1 stay on the original Worker.
+      - name: Build original POS UI as static assets
+        run: pnpm run build:spa
+
+      - name: Attach static UI while retaining existing backend assets
+        run: pnpm run attach:spa
+
+      - name: Assert original POS, auth API and D1 binding are intact
+        run: node --test tests/static-spa-build.test.mjs
+
+      - name: Smoke-test static POS and protected API before deployment
+        run: node scripts/smoke-free-tier.mjs
+
       - name: Verify deployment target and existing D1 binding
         run: |
           node --input-type=module <<'NODE'

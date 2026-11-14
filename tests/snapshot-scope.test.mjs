@@ -20,5 +20,5 @@ test("receipt details and stock count lines use bounded parent windows", () => {
 
 test("finance and audit snapshots cannot be silently overwritten by tables polling", () => {
   assert.match(ui, /if \(\["finance", "audit"\]\.includes\(viewRef\.current\)\) return;/);
-  assert.match(ui, /await load\(true, true\);/);
+  assert.match(ui, /await load\(true, true, undefined, "live"\);/);
 });
