@@ -3,6 +3,8 @@ on:
   push:
     branches:
       - opt/cloudflare-free-classroom-2026
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 permissions:
   contents: read
