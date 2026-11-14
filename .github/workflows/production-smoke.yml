@@ -1,0 +1,41 @@
+name: Verify live Hotel POS static pages (read-only)
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/production-smoke.yml"
+  workflow_run:
+    workflows: ["Deploy experimental Hotel Central POS to Cloudflare"]
+    types: [completed]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  smoke:
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    env:
+      BASE_URL: https://hotel-central-pos-university.markparametbubchaiya.workers.dev
+    steps:
+      - name: Verify public POS and login run as static HTML
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL --retry 3 --max-time 30 "$BASE_URL/" -o /tmp/pos-home.html
+          grep -q '<title>THE PBRU HERITAGE POS</title>' /tmp/pos-home.html
+          asset="$(grep -oE 'src="/assets/[^"]+\.js"' /tmp/pos-home.html | head -1 | cut -d '"' -f2)"
+          test -n "$asset"
+          curl -fsSL --retry 3 --max-time 30 "$BASE_URL$asset" -o /tmp/pos-app.js
+          test -s /tmp/pos-app.js
+          curl -fsSL --retry 3 --max-time 30 "$BASE_URL/login" -o /tmp/pos-login.html
+          grep -q '<title>เข้าสู่ระบบ – Hotel Central POS</title>' /tmp/pos-login.html
+          echo "PASS: Original design POS and login served as static assets."
+      - name: Confirm guest requests cannot read private POS API
+        shell: bash
+        run: |
+          set -euo pipefail
+          status="$(curl -sSL --max-time 30 -o /tmp/guest-api.txt -w '%{http_code}' "$BASE_URL/api/pos?scope=tables")"
+          test "$status" = "401"
+          grep -q 'กรุณาเข้าสู่ระบบ' /tmp/guest-api.txt
+          echo "PASS: Guest still blocked from private POS API."
