@@ -1,0 +1,26 @@
+name: Verify POS Free-tier optimization (no deployment)
+on:
+  push:
+    branches:
+      - opt/cloudflare-free-classroom-2026
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.25.0
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Run existing and new POS regression checks
+        run: node --test tests/cpu-patch.test.mjs tests/snapshot-scope.test.mjs tests/live-refresh-lite.test.mjs
+      - name: Build without deploying Cloudflare
+        run: pnpm run build
