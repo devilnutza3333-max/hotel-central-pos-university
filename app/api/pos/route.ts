@@ -340,6 +340,66 @@ export async function GET(request: Request) {
       }).where(eq(printQueueJobs.id, job.id));
     }
   }
+  // High-frequency screens require only volatile, active operational records.
+  // Preserve all full snapshot queries for initial load, navigation and edits.
+  // Unlike the full scope, this never scans receipts, inventory, history or menus.
+  if (isLiveRefresh && ["tables", "service", "kitchen", "bar", "host", "delivery"].includes(scope)) {
+    const [liveTables, liveOrders, liveRequests, liveGuests, liveDeliveries, liveQueue] = await Promise.all([
+      db.select().from(diningTables).orderBy(asc(diningTables.number)),
+      db.select().from(orders).where(inArray(orders.status, [...activeOrderStatuses]))
+        .orderBy(desc(orders.updatedAt)).limit(100),
+      db.select().from(serviceRequests).orderBy(desc(serviceRequests.createdAt)).limit(100),
+      needsHost ? db.select().from(guestVisits).orderBy(desc(guestVisits.updatedAt)).limit(300) : Promise.resolve([]),
+      deliveryAccess ? db.select().from(deliveryOrders).orderBy(desc(deliveryOrders.createdAt)).limit(100) : Promise.resolve([]),
+      productionScope ? db.select().from(printQueueJobs).orderBy(desc(printQueueJobs.createdAt)).limit(200) : Promise.resolve([]),
+    ]);
+    const liveItems = liveOrders.length
+      ? await db.select().from(orderItems).where(and(
+          ne(orderItems.status, "void"),
+          inArray(orderItems.orderId, db.select({ id: orders.id }).from(orders)
+            .where(inArray(orders.status, [...activeOrderStatuses]))
+            .orderBy(desc(orders.updatedAt)).limit(100)),
+        ))
+      : [];
+    // Keep the same 100-order window across delivery orders and their items.
+    const liveDeliveryItems = needsDeliveryItems && liveDeliveries.length
+      ? await db.select().from(deliveryOrderItems).where(inArray(
+          deliveryOrderItems.orderId,
+          db.select({ id: deliveryOrders.id }).from(deliveryOrders)
+            .orderBy(desc(deliveryOrders.createdAt)).limit(100),
+        ))
+      : [];
+    const actorIds = [...new Set([
+      ...liveDeliveries.map((order) => order.riderId).filter((id): id is string => Boolean(id)),
+      ...liveQueue.map((job) => job.handledBy).filter((id): id is string => Boolean(id)),
+    ])];
+    const actors = actorIds.length
+      ? await db.select({ id: users.id, name: users.name }).from(users).where(inArray(users.id, actorIds))
+      : [];
+    const actorNames = new Map(actors.map((user) => [user.id, user.name]));
+    return NextResponse.json({
+      tables: liveTables.map((table) => management ? table : {
+        id: table.id, number: table.number, zone: table.zone, seats: table.seats, status: table.status,
+      }),
+      orders: liveOrders,
+      items: liveItems,
+      serviceRequests: liveRequests,
+      ...(needsHost ? { guestVisits: liveGuests } : {}),
+      ...(deliveryAccess ? {
+        deliveryOrders: liveDeliveries.map((order) => ({
+          ...order, riderName: order.riderId ? actorNames.get(order.riderId) ?? "ผู้ส่งอาหาร" : null,
+        })),
+      } : {}),
+      ...(needsDeliveryItems ? { deliveryItems: liveDeliveryItems } : {}),
+      ...(productionScope ? { printQueueJobs: liveQueue.map((job) => ({
+        ...job,
+        itemIds: (() => { try { return JSON.parse(job.itemIds) as string[]; } catch { return []; } })(),
+        handledByName: job.handledBy ? actorNames.get(job.handledBy) ?? "เครื่องครัว" : null,
+      })) } : {}),
+      serverTime: new Date().toISOString(),
+    });
+  }
+
   const [tableRows, menuRows, menuAdminRows, imageRows, rawUserRows, accountRows, orderRows, logRows, inventoryRows, recipeRows, movementRows, receiptRows, receiptItemRows, stockCountSessionRows, stockCountLineRows, deliveryRows, deliveryItemRows, settingRows, serviceRows, guestVisitRows, readinessRunRows, openingClosingRunRows, shiftRows, cashMovementRows, paymentRows, printJobRows, printQueueRows] = await Promise.all([
     db.select().from(diningTables).orderBy(asc(diningTables.number)),
     !isLiveRefresh ? db.select().from(menuItems).where(eq(menuItems.active, true)).orderBy(asc(menuItems.category), asc(menuItems.name)) : Promise.resolve([]),
