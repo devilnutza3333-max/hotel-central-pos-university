@@ -19,7 +19,13 @@ export default function LoginPage() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ username, password }),
       });
-      const payload = (await response.json()) as { error?: string };
+      const responseText = await response.text();
+      let payload: { error?: string };
+      try {
+        payload = JSON.parse(responseText) as { error?: string };
+      } catch {
+        throw new Error("ระบบส่วนกลางยังไม่พร้อม กรุณาลองใหม่อีกครั้ง (HTTP " + response.status + ")");
+      }
       if (!response.ok) throw new Error(payload.error ?? "เข้าสู่ระบบไม่สำเร็จ");
       const requested = new URLSearchParams(window.location.search).get("return_to") ?? "/";
       window.location.assign(requested.startsWith("/") && !requested.startsWith("//") ? requested : "/");
