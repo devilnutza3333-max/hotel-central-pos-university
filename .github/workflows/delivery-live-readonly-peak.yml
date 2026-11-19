@@ -1,0 +1,47 @@
+name: Live Cloudflare delivery read-only peak probe (no orders written)
+on:
+  push:
+    branches: [test/delivery-live-readonly-20261119]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  smoke-load:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Validate public menu and probe 10, 20, 30 simultaneous READ-ONLY requests
+        run: |
+          node --input-type=module <<'NODE'
+          const base="https://hotel-central-pos-university.markparametbubchaiya.workers.dev";
+          const durations=[];
+          let allPassed=true;
+          for(const parallel of [10,20,30]){
+            const results=await Promise.all(Array.from({length:parallel},async ()=>{
+              const begin=performance.now();
+              try{
+                const response=await fetch(base+"/api/delivery",{cache:"no-store",signal:AbortSignal.timeout(18000)});
+                const type=response.headers.get("content-type")||"";
+                const text=await response.text();
+                let body=null;
+                try{body=JSON.parse(text)}catch{}
+                const ok=response.status===200&&type.includes("application/json")&&Array.isArray(body?.menu)&&body.menu.length>0;
+                return {http:response.status,ok,menuCount:body?.menu?.length||0,ms:Math.round(performance.now()-begin),error:ok?null:(body?.error||text.slice(0,90))};
+              }catch(e){return {http:0,ok:false,ms:Math.round(performance.now()-begin),error:String(e)}}
+            }));
+            const successes=results.filter(r=>r.ok).map(r=>r.ms).sort((a,b)=>a-b);
+            const failed=results.filter(r=>!r.ok);
+            const p95=successes.length?successes[Math.max(0,Math.ceil(successes.length*.95)-1)]:null;
+            const row={type:"live_public_delivery_menu",parallel,total:results.length,success:successes.length,failed:failed.length,p95_ms:p95,max_ms:successes.at(-1)??null,menuCount:results.find(r=>r.ok)?.menuCount??0,errors:failed.slice(0,3)};
+            durations.push(row);
+            console.log("LIVE_READONLY_REPORT "+JSON.stringify(row));
+            if(failed.length)allPassed=false;
+            await new Promise(done=>setTimeout(done,350));
+          }
+          console.log("FINAL_READONLY "+JSON.stringify({status:allPassed?"PASS":"FAIL",results:durations,scope:"Real Cloudflare Worker + real D1, public menu GET only; no creation, payment or delivery mutations"}));
+          if(!allPassed)process.exitCode=1;
+          NODE
