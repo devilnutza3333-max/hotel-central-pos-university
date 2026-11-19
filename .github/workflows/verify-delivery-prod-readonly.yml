@@ -1,0 +1,54 @@
+name: Verify live delivery traffic after production deploy (READ ONLY)
+on:
+  workflow_run:
+    workflows: ["Deploy experimental Hotel Central POS to Cloudflare"]
+    types: [completed]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  safe-traffic:
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Probe live delivery API with 10, 20, 30 simultaneous GET only
+        run: |
+          node --input-type=module <<'NODE'
+          const base="https://hotel-central-pos-university.markparametbubchaiya.workers.dev";
+          const scenarios=[
+            {name:"delivery_menu",path:"/api/delivery",parallel:[10,20,30]},
+            {name:"delivery_static",path:"/delivery",parallel:[30]},
+          ];
+          let bad=0;
+          for (const scenario of scenarios){
+            for(const n of scenario.parallel){
+              const result=await Promise.all(Array.from({length:n},async ()=>{
+                const start=performance.now();
+                try {
+                  const r=await fetch(base+scenario.path,{cache:"no-store",signal:AbortSignal.timeout(15000)});
+                  const body=await r.text();
+                  let valid=r.status===200;
+                  if(scenario.name==="delivery_menu") {
+                    try {const j=JSON.parse(body);valid=valid&&Array.isArray(j.menu)&&j.menu.length>0;}catch{valid=false;}
+                  } else valid=valid&&body.includes("Hotel Central Delivery");
+                  return {ok:valid,http:r.status,ms:Math.round(performance.now()-start),error:valid?null:body.slice(0,80)};
+                }catch(e){return {ok:false,http:0,ms:Math.round(performance.now()-start),error:String(e)}}
+              }));
+              const ok=result.filter(x=>x.ok).sort((a,b)=>a.ms-b.ms);
+              const failed=result.filter(x=>!x.ok);
+              bad+=failed.length;
+              console.log("PRODUCTION_READONLY",JSON.stringify({
+                scenario:scenario.name,parallel:n,total:result.length,success:ok.length,failed:failed.length,
+                p95_ms:ok.length?ok[Math.max(0,Math.ceil(ok.length*.95)-1)].ms:null,
+                max_ms:ok.at(-1)?.ms??null,errors:failed.slice(0,3)
+              }));
+            }
+          }
+          console.log("PRODUCTION_READONLY_RESULT",bad?"FAIL":"PASS");
+          if(bad)process.exitCode=1;
+          NODE
