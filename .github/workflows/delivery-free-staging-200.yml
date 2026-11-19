@@ -1,0 +1,118 @@
+name: Cloudflare Free real delivery 200/day peak STAGING (isolated D1, no production writes)
+on:
+  push:
+    branches: [perf/delivery-200-cloudflare-free-staging-20261119]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: hotel-pos-delivery-staging
+  cancel-in-progress: false
+jobs:
+  test-staging:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      STAGE_DB: hotel-pos-delivery-lab-20261119
+      STAGE_URL: https://hotel-central-pos-delivery-lab.markparametbubchaiya.workers.dev
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.25.0
+      - name: Check Cloudflare connection
+        shell: bash
+        run: |
+          test -n "$CLOUDFLARE_API_TOKEN"
+          test -n "$CLOUDFLARE_ACCOUNT_ID"
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Run scoped delivery regression tests
+        run: node --test tests/delivery-perf.test.mjs tests/delivery-manager-controls.test.mjs tests/live-refresh-lite.test.mjs tests/snapshot-scope.test.mjs
+      - name: Build original Worker and static UI without changing production
+        run: |
+          pnpm run build
+          pnpm run build:spa
+          pnpm run attach:spa
+          node --test tests/static-spa-build.test.mjs
+      - name: Simulate 600 orders with isolated LOCAL D1 before remote deployment
+        run: node scripts/load-test-delivery-200.mjs
+      - name: Find or create a separate D1 staging database
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm exec wrangler d1 list --json > /tmp/hotel-d1-before.json
+          if ! node --input-type=module -e 'import fs from "node:fs"; const db=JSON.parse(fs.readFileSync("/tmp/hotel-d1-before.json","utf8")); process.exit(Array.isArray(db)&&db.some(x=>x.name===process.env.STAGE_DB)?0:1)'; then
+            pnpm exec wrangler d1 create "$STAGE_DB" --location apac > /tmp/hotel-d1-create.log
+          fi
+          pnpm exec wrangler d1 list --json > /tmp/hotel-d1-after.json
+          node --input-type=module <<'NODE'
+          import fs from "node:fs";
+          const rows=JSON.parse(fs.readFileSync("/tmp/hotel-d1-after.json","utf8"));
+          if(!Array.isArray(rows))throw Error("D1 database list format unexpected");
+          const found=rows.find(row=>row.name===process.env.STAGE_DB);
+          const id=found?.uuid || found?.database_id || found?.id;
+          if(!id || !/^[a-f0-9-]{36}$/.test(id) || id==="bf87916e-6755-4a4b-8916-ad7a709c573b"){
+            throw Error("No validated dedicated STAGING D1 ID; never use production DB");
+          }
+          fs.appendFileSync(process.env.GITHUB_ENV,"STAGING_DATABASE_ID="+id+"\n");
+          console.log("Dedicated D1 stage name confirmed:",process.env.STAGE_DB);
+          NODE
+      - name: Construct isolated stage config and ephemeral manager test session
+        run: node scripts/prepare-delivery-stage.mjs
+      - name: Apply schema to staging D1 only
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm exec wrangler d1 execute "$STAGE_DB" --remote --yes --config dist/server/wrangler.staging.json --json --command "SELECT name FROM sqlite_master WHERE type='table' AND name='delivery_orders'" > /tmp/hotel-stage-tables.json
+          if ! node --input-type=module -e 'import fs from "node:fs";const s=JSON.stringify(JSON.parse(fs.readFileSync("/tmp/hotel-stage-tables.json","utf8")));process.exit(s.includes("delivery_orders")?0:1)'; then
+            for migration in drizzle/00*.sql; do
+              echo "Staging migration: $(basename "$migration")"
+              pnpm exec wrangler d1 execute "$STAGE_DB" --remote --yes --config dist/server/wrangler.staging.json --file "$migration" > /tmp/hotel-stage-migrate.log
+            done
+          else
+            echo "Existing isolated staging schema found; ensuring additive delivery indexes"
+            pnpm exec wrangler d1 execute "$STAGE_DB" --remote --yes --config dist/server/wrangler.staging.json --file drizzle/0015_delivery_perf_indexes.sql > /tmp/hotel-stage-migrate.log
+          fi
+          pnpm exec wrangler d1 execute "$STAGE_DB" --remote --yes --config dist/server/wrangler.staging.json --file /tmp/hotel-delivery-stage-seed.sql > /tmp/hotel-stage-seed.log
+      - name: Deploy STAGING Worker with D1 isolated from production
+        run: pnpm exec wrangler deploy --config dist/server/wrangler.staging.json
+      - name: Verify real Cloudflare Free stage pages and protected API
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL --retry 3 --max-time 25 "$STAGE_URL/delivery" -o /tmp/hotel-delivery-stage.html
+          grep -q "Hotel Central Delivery" /tmp/hotel-delivery-stage.html
+          curl -fsSL --retry 3 --max-time 25 "$STAGE_URL/api/delivery" -o /tmp/hotel-delivery-stage-menu.json
+          node --input-type=module -e 'import fs from "node:fs";const j=JSON.parse(fs.readFileSync("/tmp/hotel-delivery-stage-menu.json","utf8"));if(!Array.isArray(j.menu))process.exit(1);console.log("Remote stage public menu items:",j.menu.length)'
+          curl -fsSL --retry 3 --max-time 25 "$STAGE_URL/" -o /tmp/hotel-pos-stage.html
+          grep -q "THE PBRU HERITAGE POS" /tmp/hotel-pos-stage.html
+          echo "Cloudflare staging UI: $STAGE_URL/delivery"
+      - name: Simulate 200 orders per day + lunch peak on REAL Cloudflare STAGING D1
+        shell: bash
+        run: |
+          set -euo pipefail
+          TEST_BASE_URL="$STAGE_URL" TEST_SESSION_TOKEN="$(cat /tmp/hotel-delivery-stage-token)" node scripts/load-test-delivery-200.mjs
+      - name: Publish measured results
+        if: always()
+        shell: bash
+        run: |
+          if [ -f test-results/delivery-200-peak-report.md ]; then cat test-results/delivery-200-peak-report.md >> "$GITHUB_STEP_SUMMARY"; fi
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Staging: $STAGE_URL/delivery" >> "$GITHUB_STEP_SUMMARY"
+          echo "Production Worker/D1 were NOT targeted by this benchmark." >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload detailed report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hotel-delivery-cloudflare-free-200-orders-real-stage
+          path: |
+            test-results/delivery-200-peak-report.json
+            test-results/delivery-200-peak-report.md
+          if-no-files-found: warn
+          retention-days: 30
