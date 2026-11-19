@@ -9,7 +9,7 @@ import path from "node:path";
 const configPath = path.resolve("dist/server/wrangler.json");
 const configDir = path.dirname(configPath);
 const spaDir = path.resolve("dist/spa");
-const required = ["index.html", "login/index.html"];
+const required = ["index.html", "login/index.html", "delivery/index.html"];
 if (!fs.existsSync(configPath)) throw new Error("Build vinext server before attaching static POS");
 for (const asset of required) {
   if (!fs.existsSync(path.join(spaDir, asset))) throw new Error(`Missing SPA asset: ${asset}`);

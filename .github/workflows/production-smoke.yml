@@ -31,6 +31,16 @@ jobs:
           curl -fsSL --retry 3 --max-time 30 "$BASE_URL/login" -o /tmp/pos-login.html
           grep -q '<title>เข้าสู่ระบบ – Hotel Central POS</title>' /tmp/pos-login.html
           echo "PASS: Original design POS and login served as static assets."
+      - name: Verify customer delivery is static and public menu responds
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL --retry 3 --max-time 30 "$BASE_URL/delivery" -o /tmp/delivery-home.html
+          grep -q '<title>Hotel Central Delivery' /tmp/delivery-home.html
+          grep -q 'src="/assets/' /tmp/delivery-home.html
+          curl -fsSL --retry 3 --max-time 30 "$BASE_URL/api/delivery" -o /tmp/delivery-menu.json
+          node -e 'const fs=require("node:fs");const x=JSON.parse(fs.readFileSync("/tmp/delivery-menu.json","utf8"));if(!Array.isArray(x.menu)||x.menu.length<1)process.exit(1);console.log("PASS public delivery menu count:",x.menu.length)'
+          echo "PASS: Delivery static page loads, backend returns nonempty menu (no order writes)."
       - name: Confirm guest requests cannot read private POS API
         shell: bash
         run: |

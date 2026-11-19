@@ -1,0 +1,31 @@
+name: Inspect delivery page and public menu (read-only)
+on:
+  push:
+    branches: [fix/delivery-free-static-20261119]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Probe existing live delivery and public menu without submitting orders
+        run: |
+          node --input-type=module <<'NODE'
+          const origin = 'https://hotel-central-pos-university.markparametbubchaiya.workers.dev';
+          for (const path of ['/','/delivery','/api/delivery']) {
+            try {
+              const start = performance.now();
+              const r = await fetch(origin+path,{signal:AbortSignal.timeout(15000)});
+              const t=await r.text();
+              let count=null, menuError=null;
+              if(path==='/api/delivery'&&r.headers.get('content-type')?.includes('application/json')){
+                try {const j=JSON.parse(t);count=Array.isArray(j.menu)?j.menu.length:null;menuError=j.error||null}catch{}
+              }
+              const result={path,http:r.status,type:r.headers.get('content-type'),bytes:t.length,ms:Math.round(performance.now()-start),hasHtml:t.includes('<html'),menuCount:count,menuError};
+              console.log('READONLY',JSON.stringify(result));
+            }catch(e){console.log('READONLY',JSON.stringify({path,error:String(e)}));}
+          }
+          NODE

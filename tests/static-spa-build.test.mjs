@@ -19,6 +19,9 @@ test("uses the same production Worker and D1; never changes the database", () =>
 test("same original HTML/React UI loaded as static files without Next SSR", () => {
   const indexHtml = fs.readFileSync(path.join(assetsRoot, "index.html"), "utf8");
   const loginHtml = fs.readFileSync(path.join(assetsRoot, "login/index.html"), "utf8");
+  const deliveryHtml = fs.readFileSync(path.join(assetsRoot, "delivery/index.html"), "utf8");
+  assert.match(deliveryHtml, /Hotel Central Delivery/);
+  assert.match(deliveryHtml, /assets\//);
   assert.match(indexHtml, /THE PBRU HERITAGE POS/);
   assert.match(loginHtml, /Hotel Central POS/);
   assert.match(indexHtml, /assets\//);

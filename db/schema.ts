@@ -235,7 +235,7 @@ export const deliveryOrders = sqliteTable("delivery_orders", {
   deliveryPoint: text("delivery_point").notNull(),
   note: text("note").notNull().default(""),
   campusConfirmed: integer("campus_confirmed", { mode: "boolean" }).notNull().default(false),
-  status: text("status", { enum: ["pending", "confirmed", "preparing", "out_for_delivery", "near_arrival", "delivered", "cancelled"] }).notNull().default("pending"),
+  status: text("status", { enum: ["pending", "confirmed", "preparing", "ready_for_pickup", "out_for_delivery", "near_arrival", "delivered", "cancelled"] }).notNull().default("pending"),
   trackingToken: text("tracking_token").unique(),
   riderId: text("rider_id"),
   subtotal: integer("subtotal").notNull().default(0),

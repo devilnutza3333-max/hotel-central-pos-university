@@ -143,7 +143,7 @@ function detectSystemAlerts(previous: Snapshot | null, next: Snapshot): SystemAl
 
   const previousDeliveries = new Map(previous.deliveryOrders.map((order) => [order.id, order]));
   if (next.deliveryOrders.some((order) => order.status === "pending" && !previousDeliveries.has(order.id))) alerts.push({ tone: "delivery", label: "มีออเดอร์เดลิเวอรีใหม่" });
-  if (next.deliveryOrders.some((order) => order.status === "preparing" && previousDeliveries.get(order.id)?.status !== "preparing")) alerts.push({ tone: "rider", label: "มีงานเดลิเวอรีพร้อมรับ" });
+  if (next.deliveryOrders.some((order) => order.status === "ready_for_pickup" && previousDeliveries.get(order.id)?.status !== "ready_for_pickup")) alerts.push({ tone: "rider", label: "มีงานเดลิเวอรีพร้อมรับ" });
   return alerts;
 }
 

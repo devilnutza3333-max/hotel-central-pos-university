@@ -1,0 +1,35 @@
+name: Verify delivery repair (no production deployment)
+on:
+  push:
+    branches: [fix/delivery-free-static-20261119]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.25.0
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Run regression tests
+        run: node --test tests/cpu-patch.test.mjs tests/snapshot-scope.test.mjs tests/live-refresh-lite.test.mjs
+      - name: Build original Worker
+        run: pnpm run build
+      - name: Build original static POS including delivery
+        run: pnpm run build:spa
+      - name: Attach static assets
+        run: pnpm run attach:spa
+      - name: Check static assets and D1 target
+        run: node --test tests/static-spa-build.test.mjs
+      - name: Test delivery end-to-end against isolated local D1
+        run: node scripts/test-delivery-local.mjs
+      - name: Verify original core POS page remains intact
+        run: node scripts/smoke-free-tier.mjs

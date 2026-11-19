@@ -18,6 +18,7 @@ export default defineConfig({
       input: {
         pos: path.join(root, "spa/index.html"),
         login: path.join(root, "spa/login/index.html"),
+        delivery: path.join(root, "spa/delivery/index.html"),
       },
     },
     sourcemap: false,
