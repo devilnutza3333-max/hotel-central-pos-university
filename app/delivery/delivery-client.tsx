@@ -5,7 +5,7 @@ import { Check, CheckCircle2, ChefHat, Clock3, MapPin, MessageCircle, Minus, Nav
 
 type MenuItem = { id: number; name: string; category: string; price: number; description: string; imageUrl: string | null };
 type DeliveryData = { menu: MenuItem[]; lineGroupUrl: string };
-type TrackingStatus = "pending" | "confirmed" | "preparing" | "out_for_delivery" | "near_arrival" | "delivered" | "cancelled";
+type TrackingStatus = "pending" | "confirmed" | "preparing" | "ready_for_pickup" | "out_for_delivery" | "near_arrival" | "delivered" | "cancelled";
 type TrackingOrder = {
   orderNumber: string;
   customerName: string;
@@ -24,11 +24,22 @@ type TrackingOrder = {
   items: { id: string; name: string; unitPrice: number; quantity: number }[];
 };
 
+async function parseDeliveryResponse<T>(response: Response): Promise<T> {
+  const content = await response.text();
+  try {
+    return JSON.parse(content) as T;
+  } catch {
+    // Worker CPU limits can return HTML instead of JSON. Avoid exposing broken JSON errors.
+    throw new Error(`ระบบเดลิเวอรีตอบกลับไม่สมบูรณ์ (HTTP ${response.status}) กรุณาลองใหม่อีกครั้ง`);
+  }
+}
+
 const money = (value: number) => new Intl.NumberFormat("th-TH", { style: "currency", currency: "THB" }).format(value / 100);
 const trackingSteps = [
   { status: "pending", label: "ส่งออเดอร์แล้ว", icon: Clock3 },
   { status: "confirmed", label: "ร้านรับออเดอร์", icon: PackageCheck },
   { status: "preparing", label: "กำลังเตรียมอาหาร", icon: ChefHat },
+  { status: "ready_for_pickup", label: "อาหารพร้อมให้ผู้ส่งรับ", icon: PackageCheck },
   { status: "out_for_delivery", label: "กำลังนำส่ง", icon: Truck },
   { status: "near_arrival", label: "ใกล้ถึงแล้ว", icon: Navigation },
   { status: "delivered", label: "ส่งเรียบร้อย", icon: Check },
@@ -107,7 +118,7 @@ export default function DeliveryClient() {
       if (queryToken || storedToken) setTrackingToken(queryToken || storedToken);
       if (window.localStorage.getItem("hotel-central-tracking-sound") === "on") setTrackingSoundEnabled(true);
       fetch("/api/delivery", { cache: "no-store" }).then(async (response) => {
-        const payload = await response.json() as DeliveryData & { error?: string };
+        const payload = await parseDeliveryResponse<DeliveryData & { error?: string }>(response);
         if (!response.ok) throw new Error(payload.error ?? "โหลดเมนูไม่สำเร็จ");
         setData(payload);
       }).catch((cause) => setError(cause instanceof Error ? cause.message : "เชื่อมต่อร้านไม่ได้"));
@@ -119,13 +130,15 @@ export default function DeliveryClient() {
     if (!trackingToken) return;
     let active = true;
     const loadTracking = () => fetch(`/api/delivery?track=${encodeURIComponent(trackingToken)}`, { cache: "no-store" }).then(async (response) => {
-      const payload = await response.json() as { tracking?: TrackingOrder; error?: string };
+      const payload = await parseDeliveryResponse<{ tracking?: TrackingOrder; error?: string }>(response);
       if (!response.ok || !payload.tracking) throw new Error(payload.error ?? "โหลดสถานะไม่สำเร็จ");
       if (active) { setTracking(payload.tracking); setError(""); }
     }).catch((cause) => { if (active) setError(cause instanceof Error ? cause.message : "โหลดสถานะไม่สำเร็จ"); });
     void loadTracking();
-    const timer = window.setInterval(() => void loadTracking(), 4000);
-    return () => { active = false; window.clearInterval(timer); };
+    const timer = window.setInterval(() => { if (document.visibilityState === "visible") void loadTracking(); }, 12000);
+    const onVisible = () => { if (document.visibilityState === "visible") void loadTracking(); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => { active = false; window.clearInterval(timer); document.removeEventListener("visibilitychange", onVisible); };
   }, [trackingToken]);
 
   useEffect(() => {
@@ -165,7 +178,7 @@ export default function DeliveryClient() {
     setError("");
     try {
       const response = await fetch("/api/delivery", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ customerName, phone, building, deliveryPoint, note, campusConfirmed, items: selected.map((item) => ({ menuItemId: item.id, quantity: cart[item.id] })) }) });
-      const payload = await response.json() as { ok?: boolean; error?: string; trackingToken?: string };
+      const payload = await parseDeliveryResponse<{ ok?: boolean; error?: string; trackingToken?: string }>(response);
       if (!response.ok || !payload.trackingToken) throw new Error(payload.error ?? "ส่งออเดอร์ไม่สำเร็จ");
       window.localStorage.setItem("hotel-central-delivery-tracking", payload.trackingToken);
       window.history.replaceState({}, "", `/delivery?track=${encodeURIComponent(payload.trackingToken)}`);
@@ -209,8 +222,8 @@ function TrackingPage({ tracking, error, lineGroupUrl, soundEnabled, soundReady,
   const currentIndex = trackingSteps.findIndex((step) => step.status === tracking.status);
   const cancelled = tracking.status === "cancelled";
   return <main className="delivery-public tracking-page">
-    <header className="delivery-header"><div><span className="delivery-logo">H</span><div><b>ติดตามการจัดส่ง</b><small>อัปเดตอัตโนมัติทุก 4 วินาที</small></div></div><div className="tracking-header-actions"><button className={soundEnabled && soundReady ? "active" : ""} onClick={onToggleSound}>{soundEnabled && soundReady ? <Volume2/> : <VolumeX/>}<span>{soundEnabled && soundReady ? "เปิดเสียงแล้ว" : "เปิดเสียง"}</span></button><span className="tracking-live"><i/> LIVE</span></div></header>
-    <section className={`tracking-card ${cancelled ? "cancelled" : ""}`}><div className="tracking-head"><span className="tracking-main-icon">{tracking.status === "delivered" ? <CheckCircle2/> : tracking.status === "near_arrival" ? <Navigation/> : <Truck/>}</span><div><p className="eyebrow">ORDER STATUS</p><h1>{cancelled ? "ออเดอร์ถูกยกเลิก" : tracking.status === "delivered" ? "ส่งอาหารเรียบร้อยแล้ว" : tracking.status === "near_arrival" ? "ผู้ส่งใกล้ถึงแล้ว" : tracking.status === "out_for_delivery" ? "กำลังนำอาหารไปส่ง" : tracking.status === "preparing" ? "ร้านกำลังเตรียมอาหาร" : tracking.status === "confirmed" ? "ร้านรับออเดอร์แล้ว" : "ส่งออเดอร์ให้ร้านแล้ว"}</h1><p>{tracking.orderNumber}</p></div></div>
+    <header className="delivery-header"><div><span className="delivery-logo">H</span><div><b>ติดตามการจัดส่ง</b><small>อัปเดตอัตโนมัติประมาณทุก 12 วินาที</small></div></div><div className="tracking-header-actions"><button className={soundEnabled && soundReady ? "active" : ""} onClick={onToggleSound}>{soundEnabled && soundReady ? <Volume2/> : <VolumeX/>}<span>{soundEnabled && soundReady ? "เปิดเสียงแล้ว" : "เปิดเสียง"}</span></button><span className="tracking-live"><i/> LIVE</span></div></header>
+    <section className={`tracking-card ${cancelled ? "cancelled" : ""}`}><div className="tracking-head"><span className="tracking-main-icon">{tracking.status === "delivered" ? <CheckCircle2/> : tracking.status === "near_arrival" ? <Navigation/> : <Truck/>}</span><div><p className="eyebrow">ORDER STATUS</p><h1>{cancelled ? "ออเดอร์ถูกยกเลิก" : tracking.status === "delivered" ? "ส่งอาหารเรียบร้อยแล้ว" : tracking.status === "near_arrival" ? "ผู้ส่งใกล้ถึงแล้ว" : tracking.status === "out_for_delivery" ? "กำลังนำอาหารไปส่ง" : tracking.status === "ready_for_pickup" ? "อาหารพร้อมให้ผู้ส่งรับ" : tracking.status === "preparing" ? "ร้านกำลังเตรียมอาหาร" : tracking.status === "confirmed" ? "ร้านรับออเดอร์แล้ว" : "ส่งออเดอร์ให้ร้านแล้ว"}</h1><p>{tracking.orderNumber}</p></div></div>
       {!cancelled && <div className="tracking-timeline">{trackingSteps.map(({ status, label, icon: Icon }, index) => <div className={index <= currentIndex ? "done" : ""} key={status}><span><Icon/></span><p>{label}</p></div>)}</div>}
       <div className="tracking-destination"><MapPin/><div><small>จุดรับอาหาร</small><b>{tracking.building}</b><p>{tracking.deliveryPoint}</p></div></div>
       {tracking.riderName && <div className="tracking-rider"><UserRound/><div><small>นักศึกษาผู้ส่งอาหาร</small><b>{tracking.riderName}</b></div></div>}
