@@ -1138,10 +1138,10 @@ export async function POST(request: Request) {
 
     if (action === "setDeliveryStatus") {
       const orderId = String(body.orderId);
-      const status = String(body.status) as "confirmed" | "preparing" | "out_for_delivery" | "near_arrival" | "delivered" | "cancelled";
+      const status = String(body.status) as "confirmed" | "preparing" | "ready_for_pickup" | "out_for_delivery" | "near_arrival" | "delivered" | "cancelled";
       const [order] = await db.select().from(deliveryOrders).where(eq(deliveryOrders.id, orderId)).limit(1);
       if (!order) throw new Error("ไม่พบออเดอร์เดลิเวอรี");
-      const allowed: Record<string, string[]> = { pending: ["confirmed", "cancelled"], confirmed: ["preparing"], preparing: ["out_for_delivery"], out_for_delivery: ["near_arrival"], near_arrival: ["delivered"] };
+      const allowed: Record<string, string[]> = { pending: ["confirmed", "cancelled"], confirmed: ["preparing"], preparing: ["ready_for_pickup"], ready_for_pickup: ["out_for_delivery"], out_for_delivery: ["near_arrival"], near_arrival: ["delivered"] };
       if (!allowed[order.status]?.includes(status)) throw new Error("ไม่สามารถเปลี่ยนเป็นสถานะนี้ได้");
       const management = isManagement;
       const riderAction = status === "out_for_delivery" || status === "near_arrival" || status === "delivered";
@@ -1175,7 +1175,7 @@ export async function POST(request: Request) {
         ...(status === "delivered" ? { deliveredAt: now } : {}),
       };
       if (status === "out_for_delivery") {
-        await db.update(deliveryOrders).set(statusUpdate).where(and(eq(deliveryOrders.id, orderId), eq(deliveryOrders.status, "preparing"), isNull(deliveryOrders.riderId)));
+        await db.update(deliveryOrders).set(statusUpdate).where(and(eq(deliveryOrders.id, orderId), eq(deliveryOrders.status, "ready_for_pickup"), isNull(deliveryOrders.riderId)));
         const [claimed] = await db.select({ status: deliveryOrders.status, riderId: deliveryOrders.riderId }).from(deliveryOrders).where(eq(deliveryOrders.id, orderId)).limit(1);
         if (claimed?.status !== "out_for_delivery" || claimed.riderId !== (order.riderId ?? profile.id)) throw new Error("งานนี้มีผู้รับไปก่อนแล้ว กรุณารีเฟรช");
       } else {
