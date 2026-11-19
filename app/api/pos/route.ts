@@ -41,6 +41,8 @@ import { queueKitchenPrintBatch } from "../../print-queue-server";
 const managementRoles = new Set(["instructor", "manager"]);
 const paymentRoles = new Set(["instructor", "manager", "cashier"]);
 const activeOrderStatuses = ["open", "sent", "preparing", "ready", "served"] as const;
+const activeDeliveryStatuses = ["pending", "confirmed", "preparing", "ready_for_pickup", "out_for_delivery", "near_arrival"] as const;
+const DELIVERY_BOARD_LIMIT = 250; // Covers 200 simultaneous daily delivery orders, including lunch rush.
 const dutyStationValues = ["host", "service", "kitchen", "bar", "cashier_trainee", "delivery"] as const;
 type DutyStation = typeof dutyStationValues[number];
 
@@ -350,7 +352,9 @@ export async function GET(request: Request) {
         .orderBy(desc(orders.updatedAt)).limit(100),
       db.select().from(serviceRequests).orderBy(desc(serviceRequests.createdAt)).limit(100),
       needsHost ? db.select().from(guestVisits).orderBy(desc(guestVisits.updatedAt)).limit(300) : Promise.resolve([]),
-      deliveryAccess ? db.select().from(deliveryOrders).orderBy(desc(deliveryOrders.createdAt), desc(deliveryOrders.id)).limit(100) : Promise.resolve([]),
+      deliveryAccess ? db.select().from(deliveryOrders)
+        .where(inArray(deliveryOrders.status, [...activeDeliveryStatuses]))
+        .orderBy(desc(deliveryOrders.createdAt), desc(deliveryOrders.id)).limit(DELIVERY_BOARD_LIMIT) : Promise.resolve([]),
       productionScope ? db.select().from(printQueueJobs).orderBy(desc(printQueueJobs.createdAt)).limit(200) : Promise.resolve([]),
     ]);
     const liveItems = liveOrders.length
@@ -361,12 +365,13 @@ export async function GET(request: Request) {
             .orderBy(desc(orders.updatedAt)).limit(100)),
         ))
       : [];
-    // Keep the same 100-order window across delivery orders and their items.
+    // Keep delivery lines bounded to the same active-only board window.
     const liveDeliveryItems = needsDeliveryItems && liveDeliveries.length
       ? await db.select().from(deliveryOrderItems).where(inArray(
           deliveryOrderItems.orderId,
           db.select({ id: deliveryOrders.id }).from(deliveryOrders)
-            .orderBy(desc(deliveryOrders.createdAt), desc(deliveryOrders.id)).limit(100),
+            .where(inArray(deliveryOrders.status, [...activeDeliveryStatuses]))
+            .orderBy(desc(deliveryOrders.createdAt), desc(deliveryOrders.id)).limit(DELIVERY_BOARD_LIMIT),
         ))
       : [];
     const actorIds = [...new Set([
@@ -423,12 +428,15 @@ export async function GET(request: Request) {
       db.select({ id: stockCountSessions.id }).from(stockCountSessions).orderBy(desc(stockCountSessions.serviceDate)).limit(60),
     )) : Promise.resolve([]),
     deliveryAccess
-      ? db.select().from(deliveryOrders).orderBy(desc(deliveryOrders.createdAt), desc(deliveryOrders.id)).limit(100)
+      ? db.select().from(deliveryOrders)
+          .where(inArray(deliveryOrders.status, [...activeDeliveryStatuses]))
+          .orderBy(desc(deliveryOrders.createdAt), desc(deliveryOrders.id)).limit(DELIVERY_BOARD_LIMIT)
       : Promise.resolve([]),
     needsDeliveryItems ? db.select().from(deliveryOrderItems).where(inArray(
         deliveryOrderItems.orderId,
         db.select({ id: deliveryOrders.id }).from(deliveryOrders)
-          .orderBy(desc(deliveryOrders.createdAt), desc(deliveryOrders.id)).limit(100),
+          .where(inArray(deliveryOrders.status, [...activeDeliveryStatuses]))
+          .orderBy(desc(deliveryOrders.createdAt), desc(deliveryOrders.id)).limit(DELIVERY_BOARD_LIMIT),
       )) : Promise.resolve([]),
     !isLiveRefresh ? db.select().from(appSettings) : Promise.resolve([]),
     db.select().from(serviceRequests).orderBy(desc(serviceRequests.createdAt)).limit(100),
