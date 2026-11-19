@@ -1,7 +1,5 @@
 name: Cloudflare Free real delivery 200/day peak STAGING (isolated D1, no production writes)
 on:
-  push:
-    branches: [perf/delivery-200-cloudflare-free-staging-20261119]
   workflow_dispatch:
 permissions:
   contents: read
