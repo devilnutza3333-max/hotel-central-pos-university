@@ -2,6 +2,7 @@
 
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { Check, ChefHat, Clock3, Copy, MapPin, MessageCircle, Navigation, PackageCheck, Phone, Send, Truck, UserRoundCheck } from "lucide-react";
+import { QRCodeSVG } from "qrcode.react";
 
 export type DeliveryStatus = "pending" | "confirmed" | "preparing" | "ready_for_pickup" | "out_for_delivery" | "near_arrival" | "delivered" | "cancelled";
 export type DeliveryOrder = {
@@ -48,7 +49,7 @@ export default function DeliveryManagement({ orders, items, lineGroupUrl, workin
   const [deliveryUrl, setDeliveryUrl] = useState("");
   const [message, setMessage] = useState("");
   useEffect(() => { setLineUrl(lineGroupUrl); setDeliveryUrl(`${window.location.origin}/delivery`); }, [lineGroupUrl]);
-  const qrSrc = deliveryUrl ? `https://quickchart.io/qr?text=${encodeURIComponent(deliveryUrl)}&size=280&margin=2&dark=123f3b&light=ffffff` : "";
+
   const active = useMemo(() => orders.filter((order) => !["delivered", "cancelled"].includes(order.status)), [orders]);
 
   async function saveLine(event: FormEvent<HTMLFormElement>) {
@@ -62,7 +63,7 @@ export default function DeliveryManagement({ orders, items, lineGroupUrl, workin
   }
 
   return <div className="content management-page delivery-management"><div className="management-heading"><div><p className="eyebrow">CAMPUS DELIVERY</p><h2>ออเดอร์เดลิเวอรีในมหาวิทยาลัย</h2><p>QR เดียวสำหรับลูกค้า เมนู ราคา และสถานะจะอัปเดตจากระบบกลางอัตโนมัติ</p></div><span className="delivery-live-count"><i/>{active.length} ออเดอร์กำลังดำเนินการ</span></div>{message && <div className="notice">{message}</div>}
-    <section className="delivery-admin-top"><article className="panel qr-panel"><div><p className="eyebrow">CUSTOMER QR</p><h3>สแกนเพื่อสั่งอาหาร</h3><p>นำ QR นี้ไปพิมพ์ ติดโต๊ะประชาสัมพันธ์ หรือส่งให้นักศึกษา</p></div>{qrSrc && <img src={qrSrc} alt="QR Code สำหรับสั่งเดลิเวอรี"/>}<code>{deliveryUrl}</code><button onClick={() => void copyLink()}><Copy/> คัดลอกลิงก์</button></article>
+    <section className="delivery-admin-top"><article className="panel qr-panel"><div><p className="eyebrow">CUSTOMER QR</p><h3>สแกนเพื่อสั่งอาหาร</h3><p>นำ QR นี้ไปพิมพ์ ติดโต๊ะประชาสัมพันธ์ หรือส่งให้นักศึกษา</p></div>{deliveryUrl && <QRCodeSVG value={deliveryUrl} size={194} fgColor="#123f3b" bgColor="#ffffff" marginSize={1} title="QR Code สำหรับสั่งเดลิเวอรี"/>}<code>{deliveryUrl}</code><button onClick={() => void copyLink()}><Copy/> คัดลอกลิงก์</button></article>
       <article className="panel line-panel"><span><MessageCircle/></span><div><p className="eyebrow">LINE COMMUNITY</p><h3>กลุ่ม LINE สำหรับลูกค้า</h3><p>ใส่ลิงก์เชิญกลุ่ม LINE ครั้งเดียว ปุ่มเข้ากลุ่มจะแสดงในหน้าลูกค้าและหน้าติดตาม</p></div><form onSubmit={saveLine}><label><span>ลิงก์เชิญกลุ่ม LINE</span><input type="url" value={lineUrl} onChange={(event) => setLineUrl(event.target.value)} placeholder="https://line.me/ti/g/..."/></label><button className="primary" disabled={working}><Check/> บันทึกลิงก์</button></form>{lineGroupUrl && <a href={lineGroupUrl} target="_blank" rel="noreferrer"><MessageCircle/> ทดลองเปิดกลุ่ม LINE</a>}</article>
     </section>
     <section className="delivery-board"><div className="delivery-board-head"><div><p className="eyebrow">LIVE ORDERS</p><h3>คิวเดลิเวอรี</h3></div><span>อัปเดตอัตโนมัติประมาณทุก 12 วินาที</span></div><div className="delivery-order-grid">{active.map((order) => <article className={`delivery-order-card ${order.status}`} key={order.id}><OrderDetails order={order} items={items}/><footer><strong>{money(order.total)}</strong><div>{order.status === "pending" && <button disabled={working} onClick={() => void onAction({ action: "setDeliveryStatus", orderId: order.id, status: "confirmed" })}><PackageCheck/> รับออเดอร์</button>}{order.status === "confirmed" && <button disabled={working} onClick={() => void onAction({ action: "setDeliveryStatus", orderId: order.id, status: "preparing" })}><ChefHat/> เริ่มเตรียม</button>}{order.status === "preparing" && <button disabled={working} onClick={() => void onAction({ action: "setDeliveryStatus", orderId: order.id, status: "ready_for_pickup" })}><PackageCheck/> อาหารพร้อมให้รับ</button>}{order.status === "ready_for_pickup" && <span className="waiting-rider"><Truck/> รอนักศึกษารับงาน</span>}{order.status === "out_for_delivery" && <button disabled={working} onClick={() => void onAction({ action: "setDeliveryStatus", orderId: order.id, status: "near_arrival" })}><Navigation/> ใกล้ถึงแล้ว</button>}{order.status === "near_arrival" && <button disabled={working} onClick={() => void onAction({ action: "setDeliveryStatus", orderId: order.id, status: "delivered" })}><Check/> ส่งสำเร็จ</button>}{order.status === "pending" && <button className="cancel" disabled={working} onClick={() => { if (window.confirm("ยกเลิกออเดอร์นี้ใช่หรือไม่")) void onAction({ action: "setDeliveryStatus", orderId: order.id, status: "cancelled" }); }}>ยกเลิก</button>}</div></footer></article>)}{!active.length && <div className="wide-empty"><Send/><h3>ยังไม่มีออเดอร์เดลิเวอรี</h3><p>เมื่อลูกค้าสแกน QR และยืนยัน ออเดอร์จะปรากฏที่นี่</p></div>}</div></section>
