@@ -1,0 +1,51 @@
+name: Delivery 200 orders a day + peak concurrency (ISOLATED, no deploy)
+on:
+  push:
+    branches: [test/delivery-200-per-day-peak-20261119]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: delivery-200-per-day-load
+  cancel-in-progress: false
+jobs:
+  delivery-load:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.25.0
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Build original API Worker
+        run: pnpm run build
+      - name: Build original static POS and delivery client
+        run: pnpm run build:spa
+      - name: Attach static frontend assets
+        run: pnpm run attach:spa
+      - name: Verify original Worker, UI and D1 target
+        run: node --test tests/static-spa-build.test.mjs tests/delivery-manager-controls.test.mjs
+      - name: Execute 600 delivery orders across 3 simulated days
+        run: node scripts/load-test-delivery-200.mjs
+      - name: Publish load report to workflow summary
+        if: always()
+        shell: bash
+        run: |
+          if [ -f test-results/delivery-200-peak-report.md ]; then
+            cat test-results/delivery-200-peak-report.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Upload full load report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: delivery-200-peak-local-d1
+          path: |
+            test-results/delivery-200-peak-report.json
+            test-results/delivery-200-peak-report.md
+          if-no-files-found: warn
+          retention-days: 30
