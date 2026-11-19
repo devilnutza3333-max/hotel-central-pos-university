@@ -84,6 +84,11 @@ try {
   assert.match(page.content,/Hotel Central Delivery/);
   assert.match(page.content,/\/assets\//);
   console.log("PASS static delivery page");
+  // The current POS initializes its demonstration menu on the first staff
+  // snapshot; do that once to reproduce a provisioned classroom database.
+  const warmup=await call("/api/pos?scope=tables",{headers:{cookie:"hotel_pos_session="+manager.token}});
+  assert.equal(warmup.status,200,"staff initialization: "+warmup.content.slice(0,200));
+  assert.ok(warmup.json?.menu?.length>=10);
   const catalog=await call("/api/delivery");
   assert.equal(catalog.status,200,"catalog error: "+catalog.content.slice(0,200));
   assert.ok(catalog.json?.menu?.length>=10);
