@@ -185,7 +185,9 @@ try{
   for(const [period,count,parallel] of d.periods){
    let left=count;
    while(left>0){
-    const batch=Math.min(left,50);
+    // During lunch rush, let all pending orders accumulate before staff actions.
+    // This verifies the board can show 80/100/120 ACTIVE orders at once.
+    const batch=Math.min(left,period==="lunch-peak"?120:50);
     await runWave(d.day,period,batch,parallel,position,manager,menu);
     position+=batch;
     left-=batch;
