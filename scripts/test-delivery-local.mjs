@@ -57,12 +57,13 @@ try {
   localSql(migrations,"delivery-regression-migrations");
   const manager=tokenFor("delivery-manager");
   const rider=tokenFor("delivery-student");
+  const actualManager=tokenFor("delivery-manager-role");
   const now=Math.floor(Date.now()/1000);
-  const people=[manager,rider];
+  const people=[manager,rider,actualManager];
   const q=[];
   for(const [i,u] of people.entries()){
-    const role=i===0?"instructor":"student";
-    q.push("INSERT INTO users (id,email,name,role,active,last_seen_at,created_at) VALUES ('"+u.id+"','virtual"+i+"@example.invalid','Virtual "+(i===0?"Manager":"Rider")+"','"+role+"',1,"+now+","+now+");");
+    const role=i===0?"instructor":i===1?"student":"manager";
+    q.push("INSERT INTO users (id,email,name,role,active,last_seen_at,created_at) VALUES ('"+u.id+"','virtual"+i+"@example.invalid','Virtual "+(i===0?"Instructor":i===1?"Rider":"Manager")+"','"+role+"',1,"+now+","+now+");");
     q.push("INSERT INTO auth_sessions (id,user_id,expires_at,created_at,last_seen_at) VALUES ('"+u.digest+"','"+u.id+"',"+(now+3600)+","+now+","+now+");");
   }
   q.push("INSERT INTO duty_shifts (id,label,service_date,status,opened_by,opened_at) VALUES ('test-shift','Training','2026-11-19','open','"+manager.id+"',"+now+");");
@@ -133,6 +134,41 @@ try {
   assert.equal(delivered.json?.tracking?.status,"delivered");
   assert.equal(delivered.json?.tracking?.riderName,"Virtual Rider");
   console.log("PASS manager prepare > food ready > rider pickup > near arrival > delivered");
+
+  // Both management roles complete every step through the same protected API.
+  // All three test orders use the isolated local D1, never production.
+  for (const [account, label, phone] of [
+    [actualManager, "manager", "0812345680"],
+    [manager, "instructor", "0812345681"],
+  ]) {
+    const publicOrder=await call("/api/delivery",{
+      method:"POST",headers:{"content-type":"application/json"},
+      body:JSON.stringify({
+        customerName:"Training "+label,phone,building:"Campus Building 7",
+        deliveryPoint:"Room 705",campusConfirmed:true,
+        items:[{menuItemId:4,quantity:1}],
+      })
+    });
+    assert.equal(publicOrder.status,200,"new "+label+" delivery: "+publicOrder.content.slice(0,220));
+    const snap=await call("/api/pos?scope=delivery",{headers:{cookie:"hotel_pos_session="+account.token}});
+    assert.equal(snap.status,200);
+    assert.equal(snap.json?.profile?.role,label);
+    const found=snap.json?.deliveryOrders?.find(order=>order.orderNumber===publicOrder.json?.orderNumber);
+    assert.ok(found?.id,"manager/instructor cannot see fresh delivery order");
+    if (label==="manager") {
+      const denied=await action(rider.token,"setDeliveryStatus",{orderId:found.id,status:"confirmed"},400);
+      assert.match(denied.json?.error||"",/อาจารย์|ผู้จัดการ/);
+    }
+    for (const status of ["confirmed","preparing","ready_for_pickup","out_for_delivery","near_arrival","delivered"]) {
+      await action(account.token,"setDeliveryStatus",{orderId:found.id,status});
+    }
+    const finished=await call("/api/delivery?track="+publicOrder.json.trackingToken);
+    assert.equal(finished.status,200);
+    assert.equal(finished.json?.tracking?.status,"delivered");
+    assert.equal(finished.json?.tracking?.riderName,label==="manager"?"Virtual Manager":"Virtual Instructor");
+    console.log("PASS "+label+" role independently confirms, prepares, accepts rider job and marks delivered");
+  }
+
   console.log("FINAL_REPORT "+JSON.stringify({status:"PASS",scope:"isolated local D1 only",steps:10,no_remote_mutations:true}));
 } catch(err){
   console.error("FINAL_REPORT "+JSON.stringify({status:"FAIL",error:String(err),workerLog:output.slice(-1800)}));

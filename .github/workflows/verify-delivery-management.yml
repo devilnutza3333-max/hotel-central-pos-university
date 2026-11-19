@@ -1,0 +1,35 @@
+name: Verify manager and instructor delivery permissions (no deployment)
+on:
+  push:
+    branches: [fix/delivery-management-controls-20261119]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 22
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.25.0
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Check delivery management button and role conditions
+        run: node --test tests/delivery-manager-controls.test.mjs tests/cpu-patch.test.mjs tests/snapshot-scope.test.mjs tests/live-refresh-lite.test.mjs
+      - name: Build existing backend
+        run: pnpm run build
+      - name: Build original POS UI
+        run: pnpm run build:spa
+      - name: Attach static pages
+        run: pnpm run attach:spa
+      - name: Check assets and D1 target
+        run: node --test tests/static-spa-build.test.mjs
+      - name: End-to-end delivery as student, manager and instructor on isolated local D1
+        run: node scripts/test-delivery-local.mjs
+      - name: Check other POS pages did not regress
+        run: node scripts/smoke-free-tier.mjs
