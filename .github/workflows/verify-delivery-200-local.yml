@@ -1,0 +1,48 @@
+name: Verify delivery 200/day with 120 outstanding peak orders (isolated)
+on:
+  push:
+    branches: [perf/delivery-200-cloudflare-free-staging-20261119]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  full-load:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.25.0
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: CPU snapshot delivery regressions
+        run: node --test tests/delivery-perf.test.mjs tests/delivery-manager-controls.test.mjs tests/live-refresh-lite.test.mjs tests/snapshot-scope.test.mjs
+      - name: Build original POS Worker and static UI
+        run: |
+          pnpm run build
+          pnpm run build:spa
+          pnpm run attach:spa
+          node --test tests/static-spa-build.test.mjs
+      - name: Test 200 delivery orders per day, including 120 pending at lunch peak
+        run: node scripts/load-test-delivery-200.mjs
+      - name: Smoke core POS UI and auth with isolated local D1
+        run: node scripts/smoke-free-tier.mjs
+      - name: Publish results
+        if: always()
+        run: |
+          if [ -f test-results/delivery-200-peak-report.md ]; then cat test-results/delivery-200-peak-report.md >> "$GITHUB_STEP_SUMMARY"; fi
+      - name: Upload metrics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: delivery-120-pending-200-daily-local
+          path: |
+            test-results/delivery-200-peak-report.json
+            test-results/delivery-200-peak-report.md
+          if-no-files-found: warn
