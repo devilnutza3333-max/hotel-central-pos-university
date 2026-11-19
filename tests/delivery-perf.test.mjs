@@ -7,7 +7,7 @@ const migration=readFileSync(new URL("../drizzle/0015_delivery_perf_indexes.sql"
 const get=api.slice(api.indexOf("export async function GET("),api.indexOf("export async function POST("));
 test("delivery board retains up to 250 active orders while bounding their items",()=>{
  assert.match(get,/needsDeliveryItems\s*\?\s*db\.select\(\)\.from\(deliveryOrderItems\)\.where\(inArray\(/);
- assert.match(get,/DELIVERY_BOARD_LIMIT = 250/);
+ assert.match(api,/DELIVERY_BOARD_LIMIT = 250/);
  assert.match(get,/\.where\(inArray\(deliveryOrders\.status, \[\.\.\.activeDeliveryStatuses\]\)\)/);
  assert.match(get,/\.limit\(DELIVERY_BOARD_LIMIT\)/);
 });
