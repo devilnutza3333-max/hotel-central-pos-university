@@ -79,7 +79,7 @@ export async function POST(request: Request) {
     }
 
     const db = getDb();
-    const openOrders = await db.select({ id: deliveryOrders.id }).from(deliveryOrders).where(and(eq(deliveryOrders.phone, phone), inArray(deliveryOrders.status, ["pending", "confirmed", "preparing", "out_for_delivery", "near_arrival"])));
+    const openOrders = await db.select({ id: deliveryOrders.id }).from(deliveryOrders).where(and(eq(deliveryOrders.phone, phone), inArray(deliveryOrders.status, ["pending", "confirmed", "preparing", "ready_for_pickup", "out_for_delivery", "near_arrival"]))).limit(3);
     if (openOrders.length >= 3) throw new Error("เบอร์นี้มีออเดอร์ที่กำลังดำเนินการครบ 3 รายการแล้ว กรุณาติดต่อร้าน");
     const menuIds = Array.from(quantities.keys());
     const availableMenus = await db.select().from(menuItems).where(and(inArray(menuItems.id, menuIds), eq(menuItems.active, true), eq(menuItems.available, true)));
