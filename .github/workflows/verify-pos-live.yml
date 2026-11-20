@@ -1,0 +1,46 @@
+name: Verify Hotel POS public API and schema
+on:
+  push:
+    branches: [main]
+    paths:
+      - "infra/pos-public-smoke-trigger.txt"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: deploy/cloudflare-account-20261120
+      - name: Verify original migrations compile on blank SQLite
+        shell: bash
+        run: |
+          set -euo pipefail
+          sqlite3 "$RUNNER_TEMP/pos-schema-test.db" "PRAGMA foreign_keys=OFF;"
+          for sql_file in drizzle/0???_*.sql; do
+            sqlite3 "$RUNNER_TEMP/pos-schema-test.db" < "$sql_file"
+          done
+          for table in users auth_accounts auth_sessions menu_items orders delivery_orders delivery_order_items dining_tables app_settings stock_count_lines; do
+            found="$(sqlite3 "$RUNNER_TEMP/pos-schema-test.db" "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='$table';")"
+            test "$found" = "1" || { echo "::error::Missing table $table"; exit 1; }
+          done
+          echo "All 16 original migrations verified on empty SQLite."
+      - name: Verify live POS API is responding after Cloudflare build
+        shell: bash
+        run: |
+          set -euo pipefail
+          url="https://hotel-central-pos-university.devilnutza3333.workers.dev/api/delivery"
+          for i in $(seq 1 24); do
+            status="$(curl -L -sS --connect-timeout 10 --max-time 35 -o "$RUNNER_TEMP/pos-api.json" -w "%{http_code}" "$url" || true)"
+            if [[ "$status" == "200" ]] && node -e 'const fs=require("fs"); const a=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); if(!Array.isArray(a.menu)) process.exit(1)' "$RUNNER_TEMP/pos-api.json" >/dev/null 2>&1; then
+              node -e 'const fs=require("fs"); const a=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); console.log("POS Delivery public API passed. Menu items:",a.menu.length)' "$RUNNER_TEMP/pos-api.json"
+              exit 0
+            fi
+            echo "Attempt $i/24: status=$status, live API not initialized yet"
+            sleep 15
+          done
+          echo "::error::POS public API never returned menu JSON within the verification window"
+          exit 1
