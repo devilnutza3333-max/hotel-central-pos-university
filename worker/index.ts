@@ -19,7 +19,7 @@ const worker = {
           reason.match(/000[0-9]_|001[0-5]_/)?.[0] ?? 
           (reason.includes("too many") ? "D1_QUERY_LIMIT" :
           reason.includes("SQLITE") ? "D1_SQLITE" : "D1_INTERNAL");
-        return new Response(JSON.stringify({ error: "POS_DATABASE_INITIALIZATION_FAILED", stage: kind }), {
+        return new Response(JSON.stringify({ error: "POS_DATABASE_INITIALIZATION_FAILED", stage: kind, detail: reason.replace(/[^A-Za-z0-9 _.:()\-]/g, " ").slice(0, 160) }), {
           status: 503,
           headers: { "content-type": "application/json", "cache-control": "no-store" },
         });
