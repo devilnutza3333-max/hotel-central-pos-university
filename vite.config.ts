@@ -71,7 +71,7 @@ export default defineConfig(async ({ command }) => {
                   {
                     binding: "DB",
                     database_name: "hotel-central-pos-db",
-                    database_id: "bf87916e-6755-4a4b-8916-ad7a709c573b",
+                    database_id: "387ccbd0-087e-4714-b3da-d1e58783cee5",
                   },
                 ],
               }
