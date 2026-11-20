@@ -3,3 +3,5 @@ Check Hotel Central POS D1 initialization via the publicly deployed Worker witho
 Rerun sanitized live API diagnostic after worker bootstrap branch correction.
 
 Obtain detailed sanitized SQLite diagnostic from current Cloudflare Worker.
+
+Verify one-time D1 bootstrap with transactional prepared SQL batches.
