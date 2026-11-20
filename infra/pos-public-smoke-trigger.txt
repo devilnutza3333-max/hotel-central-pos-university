@@ -1,1 +1,3 @@
 Check Hotel Central POS D1 initialization via the publicly deployed Worker without Cloudflare API tokens.
+
+Rerun sanitized live API diagnostic after worker bootstrap branch correction.
