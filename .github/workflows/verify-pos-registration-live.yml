@@ -1,0 +1,32 @@
+name: Verify live Hotel POS registration (no test accounts)
+on:
+  push:
+    branches: [main]
+    paths:
+      - "infra/pos-register-smoke-trigger.txt"
+permissions:
+  contents: read
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    steps:
+      - name: Check deployment and registration API without creating accounts
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="https://hotel-central-pos-university.devilnutza3333.workers.dev"
+          for i in $(seq 1 36); do
+            page="$(curl -sS --connect-timeout 10 --max-time 30 -o "$RUNNER_TEMP/pos-register.html" -w "%{http_code}" "$base/register" || true)"
+            invalid="$(curl -sS --connect-timeout 10 --max-time 30 -o "$RUNNER_TEMP/pos-invalid.json" -w "%{http_code}" -X POST "$base/api/auth/register" -H 'content-type: application/json' --data '{"memberType":"student","program":"test","yearLevel":"1","phone":"invalid"}' || true)"
+            unauthorized="$(curl -sS --connect-timeout 10 --max-time 30 -o "$RUNNER_TEMP/pos-review.json" -w "%{http_code}" "$base/api/auth/registrations" || true)"
+            delivery="$(curl -sS --connect-timeout 10 --max-time 30 -o "$RUNNER_TEMP/pos-delivery.json" -w "%{http_code}" "$base/api/delivery" || true)"
+            echo "Attempt $i/36: register=$page invalidRegister=$invalid unauthorizedReview=$unauthorized delivery=$delivery"
+            if [[ "$page" == 200 && "$invalid" == 400 && "$unauthorized" == 403 && "$delivery" == 200 ]]; then
+              echo "PASS: register page online; invalid input rejected; teacher approvals protected; delivery API unaffected"
+              exit 0
+            fi
+            sleep 15
+          done
+          echo "::error::Production registration deployment did not pass smoke test"
+          exit 1
