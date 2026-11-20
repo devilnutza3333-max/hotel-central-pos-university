@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { LoaderCircle, LockKeyhole, UserRound } from "lucide-react";
 
 export default function LoginPage() {
@@ -8,6 +8,8 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [working, setWorking] = useState(false);
+  const [passwordChanged, setPasswordChanged] = useState(false);
+  useEffect(() => { setPasswordChanged(new URLSearchParams(window.location.search).has("password_changed")); }, []);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -44,7 +46,7 @@ export default function LoginPage() {
         <form onSubmit={submit}>
           <label><span>ชื่อผู้ใช้</span><div><UserRound size={18}/><input autoCapitalize="none" autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)} required /></div></label>
           <label><span>รหัสผ่าน</span><div><LockKeyhole size={18}/><input type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} required /></div></label>
-          {typeof window !== "undefined" && new URLSearchParams(window.location.search).has("password_changed") && <p className="pos-password-success">เปลี่ยนรหัสผ่านสำเร็จแล้ว กรุณาเข้าสู่ระบบด้วยรหัสใหม่</p>}
+          {passwordChanged && <p className="pos-password-success">เปลี่ยนรหัสผ่านสำเร็จแล้ว กรุณาเข้าสู่ระบบด้วยรหัสใหม่</p>}
           {error && <p className="login-error">{error}</p>}
           <button type="submit" disabled={working}>{working ? <><LoaderCircle className="spin" size={18}/> กำลังตรวจสอบ…</> : "เข้าสู่ระบบ"}</button>
         </form>
