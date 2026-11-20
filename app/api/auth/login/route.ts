@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { getDb } from "../../../../db";
-import { authAccounts } from "../../../../db/schema";
+import { authAccounts, users } from "../../../../db/schema";
 import {
   createLocalSession,
   getAccountByUsername,
@@ -37,6 +37,8 @@ export async function POST(request: Request) {
     }).where(eq(authAccounts.userId, account.userId));
     return NextResponse.json({ error: genericError }, { status: 401 });
   }
+  const [profile] = await getDb().select({active:users.active}).from(users).where(eq(users.id,account.userId)).limit(1);
+  if (!profile?.active) return NextResponse.json({error:"บัญชีอยู่ระหว่างรออนุมัติจากอาจารย์หรือผู้จัดการ"},{status:403});
   await getDb().update(authAccounts).set({ failedAttempts: 0, lockedUntil: null, updatedAt: now }).where(eq(authAccounts.userId, account.userId));
   const session = await createLocalSession(account.userId);
   const response = NextResponse.json({ ok: true });
