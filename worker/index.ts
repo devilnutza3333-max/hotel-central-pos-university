@@ -10,7 +10,19 @@ const worker = {
     if (request.method === "GET" && new URL(request.url).pathname === "/api/delivery") {
       if (!env.DB) return new Response("POS_DATABASE_BINDING_UNAVAILABLE", { status: 503 });
       try {
-        await initializeEmptyPosDatabase(env.DB);
+        const realDb = env.DB;
+        // D1 exec() splits multiline CREATE TABLE into incomplete lines.
+        // D1 batch() executes complete prepared statements transactionally.
+        const bootstrapDb = {
+          prepare: (sql: string) => realDb.prepare(sql),
+          batch: (statements: D1PreparedStatement[]) => realDb.batch(statements),
+          exec: async (sql: string) => {
+            const statements = sql.split(";").map((part) => part.trim()).filter(Boolean);
+            if (!statements.length) throw new Error("POS_SQL_EMPTY");
+            return realDb.batch(statements.map((part) => realDb.prepare(part)));
+          },
+        } as unknown as D1Database;
+        await initializeEmptyPosDatabase(bootstrapDb);
       } catch (error) {
         console.error("POS one-time D1 initialization error", error);
         const reason = error instanceof Error ? error.message : "unknown";
