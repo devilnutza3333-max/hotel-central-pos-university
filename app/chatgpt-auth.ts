@@ -42,6 +42,8 @@ type AccessJwk = JsonWebKey & { kid?: string };
 let cachedJwks: { expiresAt: number; keys: AccessJwk[] } | null = null;
 
 export async function getChatGPTUser(): Promise<ChatGPTUser | null> {
+  // Local logins must never trust caller-supplied identity headers.
+  if (runtimeAuthEnv.AUTH_PROVIDER === "local") return getLocalUser();
   const requestHeaders = await headers();
   const userId = requestHeaders.get(USER_ID_HEADER);
   const email = requestHeaders.get(USER_EMAIL_HEADER);
@@ -59,12 +61,6 @@ export async function getChatGPTUser(): Promise<ChatGPTUser | null> {
       email,
       fullName,
     };
-  }
-
-  if (
-    runtimeAuthEnv.AUTH_PROVIDER === "local"
-  ) {
-    return getLocalUser();
   }
 
   if (
