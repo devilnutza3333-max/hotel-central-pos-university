@@ -33,13 +33,13 @@ jobs:
         run: |
           set -euo pipefail
           url="https://hotel-central-pos-university.devilnutza3333.workers.dev/api/delivery"
-          for i in $(seq 1 24); do
+          for i in $(seq 1 8); do
             status="$(curl -L -sS --connect-timeout 10 --max-time 35 -o "$RUNNER_TEMP/pos-api.json" -w "%{http_code}" "$url" || true)"
             if [[ "$status" == "200" ]] && node -e 'const fs=require("fs"); const a=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); if(!Array.isArray(a.menu)) process.exit(1)' "$RUNNER_TEMP/pos-api.json" >/dev/null 2>&1; then
               node -e 'const fs=require("fs"); const a=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); console.log("POS Delivery public API passed. Menu items:",a.menu.length)' "$RUNNER_TEMP/pos-api.json"
               exit 0
             fi
-            echo "Attempt $i/24: status=$status, live API not initialized yet"
+            echo "Attempt $i/8: status=$status; diagnostic: $(head -c 180 "$RUNNER_TEMP/pos-api.json" | tr '\n' ' ')"
             sleep 15
           done
           echo "::error::POS public API never returned menu JSON within the verification window"
