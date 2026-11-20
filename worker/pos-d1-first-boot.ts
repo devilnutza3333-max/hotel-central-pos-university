@@ -75,23 +75,32 @@ const migrations = [
 const requiredTables = ["users", "auth_accounts", "auth_sessions", "menu_items", "orders", "order_items", "delivery_orders", "delivery_order_items", "dining_tables", "app_settings", "stock_count_lines"];
 
 export async function initializeEmptyPosDatabase(db: D1Database): Promise<void> {
-  // Only bootstrap a completely blank POS database. Never migrate existing sales.
+  // A small batch per request stays below Cloudflare D1 Free's query-invocation limit.
+  // This code is temporary and the worker caller is removed after initialization.
   const before = await db.prepare(
     "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name != '_cf_KV' ORDER BY name"
   ).all<{name: string}>();
   const existing = new Set((before.results ?? []).map((row) => row.name));
-  if (requiredTables.every((name) => existing.has(name))) return;
-  if (existing.size !== 0) {
-    throw new Error("POS_SCHEMA_PARTIAL_OR_EXISTING: Refusing to alter existing database.");
+  if (!existing.has("d1_migrations")) {
+    if (existing.size > 0) throw new Error("POS_SCHEMA_EXISTS_WITHOUT_MIGRATIONS: refusing DDL.");
+    await db.exec(
+      "CREATE TABLE IF NOT EXISTS d1_migrations (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE NOT NULL, applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL);"
+    );
   }
 
-  await db.exec(
-    "CREATE TABLE d1_migrations (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE NOT NULL, applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL);"
-  );
-  for (const migration of migrations) {
-    // SQL is from committed migration files; the filename contains no user input.
+  const history = await db.prepare("SELECT name FROM d1_migrations ORDER BY id").all<{name: string}>();
+  const applied = (history.results ?? []).map((row) => row.name);
+  // A strict prefix proves the history belongs to this exact original migration sequence.
+  if (applied.some((name, index) => name !== migrations[index]?.name)) {
+    throw new Error("POS_SCHEMA_MIGRATIONS_MISMATCH: refusing DDL.");
+  }
+  for (let index = applied.length; index < Math.min(applied.length + 3, migrations.length); index++) {
+    const migration = migrations[index];
     const sql = migration.sql.trim() + "\nINSERT INTO d1_migrations (name) VALUES ('" + migration.name + "');";
     await db.exec(sql);
+  }
+  if (applied.length + 3 < migrations.length) {
+    throw new Error("POS_SCHEMA_INITIALIZING: further bounded batches pending.");
   }
 
   const after = await db.prepare(
@@ -102,8 +111,10 @@ export async function initializeEmptyPosDatabase(db: D1Database): Promise<void> 
     if (!present.has(name)) throw new Error("Missing POS table after installation: " + name);
   }
 
-  // An initial manager with a strong randomly generated password, never stored in GitHub.
-  // Only its PBKDF2 hash and salt are present in source. User receives the password privately.
+  const prior = await db.prepare("SELECT user_id FROM auth_accounts LIMIT 1").first<{user_id: string}>();
+  if (prior) return; // Never overwrite any existing manager or student account.
+
+  // First manager: random password was generated offline; only its strong hash and salt are committed.
   const now = Math.floor(Date.now() / 1000);
   const uid = "pos_mgr_cb5d4d0b40dadedb79c21010";
   await db.batch([
