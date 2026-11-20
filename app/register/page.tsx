@@ -43,18 +43,18 @@ export default function RegisterPage() {
           <label><span>ชื่อ-นามสกุล</span><input name="fullName" minLength={3} maxLength={120} placeholder="ชื่อจริง นามสกุล" required /></label>
           <label><span>ชื่อผู้ใช้ (ภาษาอังกฤษ)</span><input name="username" minLength={3} maxLength={32} pattern="[a-zA-Z0-9._-]+" autoCapitalize="none" autoComplete="username" required /></label>
           <label><span>อีเมล</span><input name="email" type="email" maxLength={180} autoComplete="email" required /></label>
-          <label><span>{kind==="student"?"รหัสนักศึกษา":"รหัสบุคลากร"}</span><input name="schoolId" minLength={3} maxLength={32} pattern="[a-zA-Z0-9-]+" required /></label>
+          {kind==="student"&&<label><span>รหัสนักศึกษา</span><input name="schoolId" minLength={3} maxLength={32} pattern="[a-zA-Z0-9-]+" required /></label>}
           <label><span>{kind==="student"?"สาขาวิชา / หลักสูตร":"สังกัด / สาขาวิชา"}</span><input name="program" minLength={2} maxLength={150} required /></label>
           {kind==="student"&&<label><span>ชั้นปี</span><select name="yearLevel" required defaultValue=""><option value="" disabled>เลือกชั้นปี</option>{[1,2,3,4,5,6].map(y=><option value={y} key={y}>ปี {y}</option>)}</select></label>}
           <label><span>โทรศัพท์ (ไม่บังคับ)</span><input name="phone" type="tel" maxLength={25} /></label>
-          <label><span>รหัสผ่าน (อย่างน้อย 10 ตัวอักษร)</span><input name="password" type="password" minLength={10} maxLength={128} autoComplete="new-password" required /></label>
+          <label><span>รหัสผ่าน (อย่างน้อย 8 ตัวอักษร)</span><input name="password" type="password" minLength={8} maxLength={128} autoComplete="new-password" required /></label>
           <label><span>ยืนยันรหัสผ่าน</span><input name="confirmPassword" type="password" minLength={10} maxLength={128} autoComplete="new-password" required /></label>
           {error&&<p className="login-error" role="alert">{error}</p>}
           {success&&<p className="register-success" role="status">{success}</p>}
           <button type="submit" disabled={busy}>{busy?"กำลังส่งคำขอ...":"สมัครสมาชิก"}</button>
-          <p className="register-note">ทุกบัญชีต้องได้รับอนุมัติจากอาจารย์หรือผู้จัดการก่อนใช้งาน และไม่มีการให้สิทธิ์ผู้จัดการโดยอัตโนมัติ</p>
+          <p className="register-note">สมัครเสร็จเข้าสู่ระบบเพื่อฝึกปฏิบัติได้ทันที ส่วนสิทธิ์อาจารย์สำหรับจัดการระบบต้องรอผู้ดูแลอนุมัติ</p>
         </form>
-        <div className="register-footer"><Link href="/login">มีบัญชีแล้ว? เข้าสู่ระบบ</Link></div>
+        <div className="register-footer"><Link href="/login">สมัครแล้ว? เข้าสู่ระบบได้เลย</Link></div>
       </section>
     </main>
   );
