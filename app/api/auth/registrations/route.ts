@@ -45,6 +45,7 @@ export async function PATCH(request: Request) {
   const userId = body.userId;
   const approve = body.decision === "approve";
   const d1 = env.DB;
+  if (!d1) return NextResponse.json({ error: "ฐานข้อมูล POS ไม่พร้อมใช้งาน" }, { status: 503 });
   const [userUpdate, requestUpdate] = await d1.batch([
     d1.prepare(`UPDATE users SET role = ?, active = ?
       WHERE id = ? AND EXISTS
