@@ -1,0 +1,1 @@
+Check Hotel Central POS D1 initialization via the publicly deployed Worker without Cloudflare API tokens.
