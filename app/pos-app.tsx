@@ -41,6 +41,7 @@ import {
   X,
 } from "lucide-react";
 import AuditPanel, { type AuditEntry } from "./audit-panel";
+import RegistrationReview from "./registration-review";
 import {
   InventoryManagement,
   MenuManagement,
@@ -718,6 +719,7 @@ function Team({ users, current, working, onRole, onCreate, onReset }: { users: P
 
   return <div className="content">
     <section className="info-banner"><ShieldCheck/><div><b>สิทธิ์ควบคุมแบบรวมศูนย์</b><p>อาจารย์สร้างบัญชีและกำหนดหน้าที่ให้แต่ละคน ข้อมูลทุกเครื่องใช้ฐานข้อมูลเดียวกัน</p></div></section>
+    {(current.role === "instructor" || (current.role === "manager" && current.id === "pos_mgr_cb5d4d0b40dadedb79c21010")) && <RegistrationReview />}
     {current.role === "instructor" && <article className="panel account-creator">
       <div className="panel-title"><div><p className="eyebrow">NEW ACCOUNT</p><h3>สร้างบัญชีนักศึกษาและพนักงาน</h3></div><button className="text-button password-button" type="button" onClick={() => setResetTarget(current)}><KeyRound size={15}/> เปลี่ยนรหัสผ่านของฉัน</button></div>
       <form className="account-form" onSubmit={createAccount}>

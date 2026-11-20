@@ -395,3 +395,17 @@ export const auditLogs = sqliteTable("audit_logs", {
   detail: text("detail").notNull(),
   createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
 });
+
+// Classroom self-registration. New teachers are inactive until explicit approval.
+export const registrationRequests = sqliteTable("registration_requests", {
+  userId: text("user_id").primaryKey(),
+  memberType: text("member_type", { enum: ["teacher", "student"] }).notNull(),
+  schoolId: text("school_id").notNull().default(""),
+  program: text("program").notNull().default(""),
+  yearLevel: text("year_level").notNull().default(""),
+  phone: text("phone").notNull(),
+  status: text("status", { enum: ["pending", "approved", "rejected"] }).notNull().default("pending"),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+  reviewedAt: integer("reviewed_at", { mode: "timestamp" }),
+  reviewedBy: text("reviewed_by"),
+}, table => [index("registration_requests_status_created_idx").on(table.status, table.createdAt)]);

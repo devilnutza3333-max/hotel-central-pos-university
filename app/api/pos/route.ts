@@ -1734,6 +1734,8 @@ export async function POST(request: Request) {
       const role = String(body.role) as "manager" | "cashier" | "student";
       if (!["manager", "cashier", "student"].includes(role)) throw new Error("บทบาทไม่ถูกต้อง");
       if (targetId === profile.id) throw new Error("เปลี่ยนบทบาทของตนเองไม่ได้");
+      const [target] = await db.select().from(users).where(eq(users.id, targetId)).limit(1);
+      if (!target?.active || target.role === "instructor") throw new Error("ไม่สามารถเปลี่ยนสิทธิ์บัญชีอาจารย์หรือบัญชีที่ยังไม่อนุมัติ");
       await db.update(users).set({ role }).where(eq(users.id, targetId));
       await log(profile.id, "SET_ROLE", `${targetId} → ${role}`);
       return NextResponse.json({ ok: true });
