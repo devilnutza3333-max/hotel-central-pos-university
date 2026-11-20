@@ -99,6 +99,37 @@ jobs:
             exit 1
           fi
           echo "REGISTRATION_STAGING_PASS $STAGE_URL/register"
+      - name: End-to-end synthetic classroom signup and pending-login protection
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import { randomBytes } from "node:crypto";
+          const suffix = randomBytes(6).toString("hex");
+          const username = "qa_" + suffix;
+          const password = randomBytes(20).toString("hex");
+          const base = process.env.STAGE_URL;
+          const registration = await fetch(base + "/api/auth/register", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              memberType: "student", fullName: "QA Classroom Test",
+              username, password, email: username+"@example.invalid",
+              schoolId: "QA-" + suffix, program: "Staging Quality Assurance",
+              yearLevel: "2",
+            }),
+          });
+          const created = await registration.json();
+          console.log("Synthetic registration HTTP", registration.status, "ok", created.ok === true);
+          if (registration.status !== 201 || created.ok !== true) throw Error("Synthetic registration failed: " + JSON.stringify(created));
+          const response = await fetch(base + "/api/auth/login", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({username,password}),
+          });
+          console.log("Unapproved user login HTTP", response.status);
+          if (response.status !== 403) throw Error("Pending account should be forbidden from login");
+          console.log("STAGING_CLASSROOM_SIGNUP_PASS (synthetic account is inactive; no production data touched)");
+          NODE
       - name: Publish training registration link
         if: always()
         run: |
