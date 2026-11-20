@@ -100,11 +100,23 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          curl -fsSL --retry 3 --max-time 25 "$STAGE_URL/delivery" -o /tmp/hotel-delivery-stage.html
+          # Cloudflare workers.dev routes may briefly return 404 immediately after deployment.
+          # Bootstrap the isolated D1 using the ephemeral manager session before inspecting the public menu.
+          for attempt in $(seq 1 12); do
+            if curl -fsSL --max-time 25 -H "Cookie: hotel_pos_session=$(cat /tmp/hotel-delivery-stage-token)" "$STAGE_URL/api/pos?scope=tables" -o /tmp/hotel-stage-bootstrap.json; then
+              if node --input-type=module -e 'import fs from "node:fs";const j=JSON.parse(fs.readFileSync("/tmp/hotel-stage-bootstrap.json","utf8"));process.exit(j.profile?.role==="manager"?0:1)'; then
+                echo "Authenticated staging bootstrap succeeded on attempt $attempt"
+                break
+              fi
+            fi
+            if [ "$attempt" -eq 12 ]; then echo "::error::Staging bootstrap unavailable after 12 attempts"; exit 1; fi
+            sleep 5
+          done
+          curl -fsSL --retry 8 --retry-all-errors --retry-delay 3 --max-time 25 "$STAGE_URL/delivery" -o /tmp/hotel-delivery-stage.html
           grep -q "Hotel Central Delivery" /tmp/hotel-delivery-stage.html
-          curl -fsSL --retry 3 --max-time 25 "$STAGE_URL/api/delivery" -o /tmp/hotel-delivery-stage-menu.json
-          node --input-type=module -e 'import fs from "node:fs";const j=JSON.parse(fs.readFileSync("/tmp/hotel-delivery-stage-menu.json","utf8"));if(!Array.isArray(j.menu))process.exit(1);console.log("Remote stage public menu items:",j.menu.length)'
-          curl -fsSL --retry 3 --max-time 25 "$STAGE_URL/" -o /tmp/hotel-pos-stage.html
+          curl -fsSL --retry 8 --retry-all-errors --retry-delay 3 --max-time 25 "$STAGE_URL/api/delivery" -o /tmp/hotel-delivery-stage-menu.json
+          node --input-type=module -e 'import fs from "node:fs";const j=JSON.parse(fs.readFileSync("/tmp/hotel-delivery-stage-menu.json","utf8"));if(!Array.isArray(j.menu)||j.menu.length<10)process.exit(1);console.log("Remote stage public menu items:",j.menu.length)'
+          curl -fsSL --retry 8 --retry-all-errors --retry-delay 3 --max-time 25 "$STAGE_URL/" -o /tmp/hotel-pos-stage.html
           grep -q "THE PBRU HERITAGE POS" /tmp/hotel-pos-stage.html
           echo "Cloudflare staging UI: $STAGE_URL/delivery"
       - name: Simulate 200 orders per day + lunch peak on REAL Cloudflare STAGING D1
