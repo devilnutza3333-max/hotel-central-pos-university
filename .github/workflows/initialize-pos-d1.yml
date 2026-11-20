@@ -1,0 +1,115 @@
+name: Initialize Hotel Central POS D1 (reviewed, safe)
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: "Type INITIALIZE_EMPTY_POS_D1 to confirm new, empty database setup"
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: initialize-hotel-central-pos-d1-387ccbd0
+  cancel-in-progress: false
+jobs:
+  initialize:
+    if: inputs.confirmation == 'INITIALIZE_EMPTY_POS_D1'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      EXPECTED_ACCOUNT_ID: "21dc6a21cc6b21a88c545bf75d39c861"
+      EXPECTED_DATABASE_ID: "387ccbd0-087e-4714-b3da-d1e58783cee5"
+      EXPECTED_DATABASE_NAME: "hotel-central-pos-db"
+    steps:
+      - name: Check Cloudflare account before any SQL
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "$CLOUDFLARE_API_TOKEN" || "$CLOUDFLARE_ACCOUNT_ID" != "$EXPECTED_ACCOUNT_ID" ]]; then
+            echo "::error::Cloudflare GitHub secrets do not match the approved POS account. NO migration was executed."
+            exit 1
+          fi
+      - uses: actions/checkout@v4
+        with:
+          ref: deploy/cloudflare-account-20261120
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install Wrangler CLI
+        run: npm install --global wrangler@4.92.0
+      - name: Verify target D1 database ID
+        shell: bash
+        run: |
+          set -euo pipefail
+          wrangler d1 list --json > "$RUNNER_TEMP/pos-d1-list.json"
+          node --input-type=module <<'NODE'
+          import fs from "node:fs";
+          const payload = JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP + "/pos-d1-list.json", "utf8"));
+          const databases = Array.isArray(payload) ? payload : (payload.result ?? payload.databases ?? []);
+          const row = databases.find((item) => item.name === process.env.EXPECTED_DATABASE_NAME);
+          if (!row || (row.uuid ?? row.id) !== process.env.EXPECTED_DATABASE_ID) {
+            throw new Error("STOP: Cloudflare D1 identity does not match this approved POS database.");
+          }
+          console.log("Verified correct Cloudflare D1 database identity.");
+          NODE
+      - name: Refuse to initialize database containing POS tables
+        shell: bash
+        run: |
+          set -euo pipefail
+          wrangler d1 execute "$EXPECTED_DATABASE_NAME" --remote --command \
+            "SELECT COUNT(*) AS count FROM sqlite_master WHERE type = 'table' AND name IN ('users','orders','menu_items','delivery_orders','d1_migrations');" \
+            --json > "$RUNNER_TEMP/pos-tables.json"
+          node --input-type=module <<'NODE'
+          import fs from "node:fs";
+          const payload = JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP + "/pos-tables.json", "utf8"));
+          const group = Array.isArray(payload) ? payload[0] : payload;
+          const count = Number(group?.results?.[0]?.count);
+          if (!Number.isFinite(count) || count !== 0) {
+            throw new Error("STOP: POS schema already exists or preflight was inconclusive. No old migration will be rerun.");
+          }
+          console.log("Target database is empty of POS application tables.");
+          NODE
+      - name: Prepare versioned migrations config for this D1 only
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from "node:fs";
+          const config = JSON.parse(fs.readFileSync("wrangler.jsonc", "utf8"));
+          if (config.name !== "hotel-central-pos-university" || config.d1_databases?.length !== 1) throw new Error("Unexpected Worker config.");
+          const d1 = config.d1_databases[0];
+          if (d1.binding !== "DB" || d1.database_name !== process.env.EXPECTED_DATABASE_NAME || d1.database_id !== process.env.EXPECTED_DATABASE_ID) throw new Error("Wrong D1 binding.");
+          d1.migrations_dir = "drizzle";
+          d1.migrations_table = "d1_migrations";
+          fs.writeFileSync(".wrangler-pos-migrate.json", JSON.stringify(config, null, 2));
+          const files = fs.readdirSync("drizzle").filter((s) => /^\d{4}_.*\.sql$/.test(s)).sort();
+          if (files.length !== 16 || !files[0].startsWith("0000_") || !files.at(-1).startsWith("0015_")) {
+            throw new Error("Unexpected migrations. Expected 0000 through 0015 exactly.");
+          }
+          console.log("Verified 16 migration files; no source files changed.");
+          NODE
+      - name: Apply 0000-0015 once with Wrangler migration tracking and backup
+        shell: bash
+        run: |
+          set -euo pipefail
+          wrangler d1 migrations list "$EXPECTED_DATABASE_NAME" --remote --config .wrangler-pos-migrate.json
+          wrangler d1 migrations apply "$EXPECTED_DATABASE_NAME" --remote --config .wrangler-pos-migrate.json
+      - name: Confirm required tables were created
+        shell: bash
+        run: |
+          set -euo pipefail
+          wrangler d1 execute "$EXPECTED_DATABASE_NAME" --remote --command \
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('users','auth_accounts','auth_sessions','menu_items','orders','order_items','delivery_orders','delivery_order_items','dining_tables','app_settings','stock_count_lines','d1_migrations') ORDER BY name;" \
+            --json > "$RUNNER_TEMP/pos-postcheck.json"
+          node --input-type=module <<'NODE'
+          import fs from "node:fs";
+          const payload = JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP + "/pos-postcheck.json", "utf8"));
+          const group = Array.isArray(payload) ? payload[0] : payload;
+          const names = new Set((group?.results ?? []).map((item) => item.name));
+          for (const name of ["users","auth_accounts","auth_sessions","menu_items","orders","order_items","delivery_orders","delivery_order_items","dining_tables","app_settings","stock_count_lines","d1_migrations"]) {
+            if (!names.has(name)) throw new Error("Missing required table: " + name);
+          }
+          console.log("POS schema initialized and verified. No orders or users inserted.");
+          NODE
