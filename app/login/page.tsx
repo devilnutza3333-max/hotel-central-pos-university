@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import Link from "next/link";
 import { LoaderCircle, LockKeyhole, UserRound } from "lucide-react";
 
 export default function LoginPage() {
@@ -47,6 +48,7 @@ export default function LoginPage() {
           {error && <p className="login-error">{error}</p>}
           <button type="submit" disabled={working}>{working ? <><LoaderCircle className="spin" size={18}/> กำลังตรวจสอบ…</> : "เข้าสู่ระบบ"}</button>
         </form>
+        <div className="register-footer"><Link href="/register">ยังไม่มีบัญชี? สมัครสมาชิกสำหรับนักศึกษา / อาจารย์</Link></div>
         <footer>ระบบส่วนกลางสำหรับโรงแรมมหาวิทยาลัย • การเชื่อมต่อเข้ารหัสด้วย HTTPS</footer>
       </section>
     </main>
