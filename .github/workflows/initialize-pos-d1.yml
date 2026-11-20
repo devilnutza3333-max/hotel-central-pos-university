@@ -6,6 +6,10 @@ on:
         description: "Type INITIALIZE_EMPTY_POS_D1 to confirm new, empty database setup"
         required: true
         type: string
+  push:
+    branches: [main]
+    paths:
+      - "infra/pos-d1-install-trigger.txt"
 permissions:
   contents: read
 concurrency:
@@ -13,7 +17,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   initialize:
-    if: inputs.confirmation == 'INITIALIZE_EMPTY_POS_D1'
+    if: (github.event_name == 'workflow_dispatch' && inputs.confirmation == 'INITIALIZE_EMPTY_POS_D1') || (github.event_name == 'push' && github.ref == 'refs/heads/main' && github.event.head_commit.message == 'INITIALIZE_EMPTY_POS_D1')
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
