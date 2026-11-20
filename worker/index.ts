@@ -13,7 +13,16 @@ const worker = {
         await initializeEmptyPosDatabase(env.DB);
       } catch (error) {
         console.error("POS one-time D1 initialization error", error);
-        return new Response("POS_DATABASE_INITIALIZATION_FAILED", { status: 503 });
+        const reason = error instanceof Error ? error.message : "unknown";
+        // Temporary sanitized diagnosis: no SQL, credentials, or user data.
+        const kind = reason.startsWith("POS_SCHEMA_") ? reason.slice(0, 100) :
+          reason.match(/000[0-9]_|001[0-5]_/)?.[0] ?? 
+          (reason.includes("too many") ? "D1_QUERY_LIMIT" :
+          reason.includes("SQLITE") ? "D1_SQLITE" : "D1_INTERNAL");
+        return new Response(JSON.stringify({ error: "POS_DATABASE_INITIALIZATION_FAILED", stage: kind }), {
+          status: 503,
+          headers: { "content-type": "application/json", "cache-control": "no-store" },
+        });
       }
     }
     let binding = ctx.props?.CONNECTORS;
