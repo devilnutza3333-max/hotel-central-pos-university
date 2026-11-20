@@ -17,7 +17,8 @@ const worker = {
           prepare: (sql: string) => realDb.prepare(sql),
           batch: (statements: D1PreparedStatement[]) => realDb.batch(statements),
           exec: async (sql: string) => {
-            const statements = sql.split(";").map((part) => part.trim()).filter(Boolean);
+            const withoutComments = sql.replace(/^[ \t]*--[^\r\n]*(?:\r?\n|$)/gm, "\n");
+            const statements = withoutComments.split(";").map((part) => part.trim()).filter(Boolean);
             if (!statements.length) throw new Error("POS_SQL_EMPTY");
             return realDb.batch(statements.map((part) => realDb.prepare(part)));
           },
