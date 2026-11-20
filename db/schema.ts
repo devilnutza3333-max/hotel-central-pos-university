@@ -24,6 +24,21 @@ export const authAccounts = sqliteTable("auth_accounts", {
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
 });
 
+export const registrationRequests = sqliteTable("registration_requests", {
+  userId: text("user_id").primaryKey(),
+  memberType: text("member_type", { enum: ["teacher", "student"] }).notNull(),
+  schoolId: text("school_id").notNull(),
+  program: text("program").notNull(),
+  yearLevel: text("year_level").notNull().default(""),
+  phone: text("phone").notNull().default(""),
+  status: text("status", { enum: ["pending", "approved", "rejected"] }).notNull().default("pending"),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+  reviewedAt: integer("reviewed_at", { mode: "timestamp" }),
+  reviewedBy: text("reviewed_by"),
+}, (table) => [
+  index("registration_requests_status_created_idx").on(table.status, table.createdAt),
+]);
+
 export const authSessions = sqliteTable("auth_sessions", {
   id: text("id").primaryKey(),
   userId: text("user_id").notNull(),
