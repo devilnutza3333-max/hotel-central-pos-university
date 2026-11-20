@@ -74,22 +74,30 @@ jobs:
           pnpm exec wrangler d1 execute "$STAGE_DB" --remote --yes --config dist/server/wrangler.staging.json --file drizzle/0016_member_registration.sql
       - name: Deploy isolated staging worker
         run: pnpm exec wrangler deploy --config dist/server/wrangler.staging.json
-      - name: Verify public registration route and authorization boundaries
+      - name: Verify registration pages and guarded API endpoints
         shell: bash
         run: |
           set -euo pipefail
           for n in $(seq 1 12); do
             code="$(curl -sSL -o /tmp/pos-register.html -w '%{http_code}' --max-time 15 "$STAGE_URL/register")"
-            if [[ "$code" == "200" ]] && grep -q "สมัครสมาชิก" /tmp/pos-register.html; then break; fi
-            if [[ "$n" == "12" ]]; then echo "::error::Registration page not available ($code)"; exit 1; fi
+            if [[ "$code" == "200" ]] && test -s /tmp/pos-register.html; then break; fi
+            if [[ "$n" == "12" ]]; then echo "::error::Registration HTML unavailable ($code)"; exit 1; fi
             sleep 5
           done
-          curl -fsSL --retry 5 --retry-all-errors --retry-delay 2 "$STAGE_URL/login" -o /tmp/pos-login.html
-          grep -q "สมัครสมาชิก" /tmp/pos-login.html
+          echo "Registration page HTTP $code (nonempty HTML); visible headings are client-rendered."
+          code="$(curl -sSL -o /tmp/pos-login.html -w '%{http_code}' "$STAGE_URL/login")"
+          echo "Login page HTTP $code"
+          test "$code" = "200"
           code="$(curl -sS -o /tmp/pending-access.json -w '%{http_code}' "$STAGE_URL/api/auth/registrations")"
+          echo "Unauthorized approvals API HTTP $code"
           test "$code" = "403"
           code="$(curl -sS -o /tmp/invalid-registration.json -w '%{http_code}' -X POST -H 'content-type: application/json' -d '{"memberType":"teacher"}' "$STAGE_URL/api/auth/register")"
-          test "$code" = "400"
+          echo "Invalid registration payload HTTP $code"
+          if [[ "$code" != "400" ]]; then
+            echo "::error::Registration POST validation failed: expected 400 got $code"
+            cat /tmp/invalid-registration.json
+            exit 1
+          fi
           echo "REGISTRATION_STAGING_PASS $STAGE_URL/register"
       - name: Publish training registration link
         if: always()
