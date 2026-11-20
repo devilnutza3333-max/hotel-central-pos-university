@@ -1,43 +1,9 @@
 import handler from "vinext/server/fetch-handler";
-import { initializeEmptyPosDatabase } from "./pos-d1-first-boot";
 import { runWithConnectorBinding } from "../lib/connector-context";
 import type { ConnectorBinding } from "../lib/connector-contract.mjs";
 
 const worker = {
-  async fetch(request: Request, env: Cloudflare.Env, ctx: ExecutionContext<{ CONNECTORS?: ConnectorBinding }>) {
-    // Bootstrap only the VERIFIED empty POS D1, on the first public menu API request.
-    // Never alter an existing POS schema and never run for orders or payments.
-    if (request.method === "GET" && new URL(request.url).pathname === "/api/delivery") {
-      if (!env.DB) return new Response("POS_DATABASE_BINDING_UNAVAILABLE", { status: 503 });
-      try {
-        const realDb = env.DB;
-        // D1 exec() splits multiline CREATE TABLE into incomplete lines.
-        // D1 batch() executes complete prepared statements transactionally.
-        const bootstrapDb = {
-          prepare: (sql: string) => realDb.prepare(sql),
-          batch: (statements: D1PreparedStatement[]) => realDb.batch(statements),
-          exec: async (sql: string) => {
-            const withoutComments = sql.replace(/^[ \t]*--[^\r\n]*(?:\r?\n|$)/gm, "\n");
-            const statements = withoutComments.split(";").map((part) => part.trim()).filter(Boolean);
-            if (!statements.length) throw new Error("POS_SQL_EMPTY");
-            return realDb.batch(statements.map((part) => realDb.prepare(part)));
-          },
-        } as unknown as D1Database;
-        await initializeEmptyPosDatabase(bootstrapDb);
-      } catch (error) {
-        console.error("POS one-time D1 initialization error", error);
-        const reason = error instanceof Error ? error.message : "unknown";
-        // Temporary sanitized diagnosis: no SQL, credentials, or user data.
-        const kind = reason.startsWith("POS_SCHEMA_") ? reason.slice(0, 100) :
-          reason.match(/000[0-9]_|001[0-5]_/)?.[0] ?? 
-          (reason.includes("too many") ? "D1_QUERY_LIMIT" :
-          reason.includes("SQLITE") ? "D1_SQLITE" : "D1_INTERNAL");
-        return new Response(JSON.stringify({ error: "POS_DATABASE_INITIALIZATION_FAILED", stage: kind, detail: reason.replace(/[^A-Za-z0-9 _.:()\-]/g, " ").slice(0, 160) }), {
-          status: 503,
-          headers: { "content-type": "application/json", "cache-control": "no-store" },
-        });
-      }
-    }
+  fetch(request: Request, env: Cloudflare.Env, ctx: ExecutionContext<{ CONNECTORS?: ConnectorBinding }>) {
     let binding = ctx.props?.CONNECTORS;
     // Local preview emulates the same request-scoped capability. This branch and
     // the auxiliary service binding are absent from production builds.
