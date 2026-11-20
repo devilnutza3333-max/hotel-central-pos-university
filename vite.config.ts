@@ -67,6 +67,7 @@ export default defineConfig(async ({ command }) => {
                 name: "hotel-central-pos-university",
                 compatibility_date: "2026-05-15",
                 keep_vars: true,
+                vars: { AUTH_PROVIDER: "local" },
                 d1_databases: [
                   {
                     binding: "DB",
