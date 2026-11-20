@@ -44,3 +44,15 @@ jobs:
           done
           echo "::error::POS public API never returned menu JSON within the verification window"
           exit 1
+      - name: Verify login route and negative login without touching accounts
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="https://hotel-central-pos-university.devilnutza3333.workers.dev"
+          login_page_status="$(curl -sS -L -o /dev/null -w "%{http_code}" "$base/login")"
+          test "$login_page_status" = "200" || { echo "::error::Login page status $login_page_status"; exit 1; }
+          delivery_page_status="$(curl -sS -L -o /dev/null -w "%{http_code}" "$base/delivery")"
+          test "$delivery_page_status" = "200" || { echo "::error::Delivery page status $delivery_page_status"; exit 1; }
+          invalid_login_status="$(curl -sS -o /dev/null -w "%{http_code}" -X POST "$base/api/auth/login" -H "content-type: application/json" --data '{"username":"not-a-real-pos-user-000","password":"invalid-password"}')"
+          test "$invalid_login_status" = "401" || { echo "::error::Negative login status $invalid_login_status"; exit 1; }
+          echo "Login page=200, Delivery page=200, unknown-account login=401; existing accounts untouched."
