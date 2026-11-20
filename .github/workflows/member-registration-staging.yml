@@ -13,6 +13,7 @@ on:
       - "app/globals.css"
       - "db/schema.ts"
       - "drizzle/0016_member_registration.sql"
+      - "drizzle/0017_activate_classroom_registrations.sql"
       - "tests/member-registration.test.mjs"
       - ".github/workflows/member-registration-staging.yml"
   workflow_dispatch:
@@ -72,6 +73,7 @@ jobs:
       - name: Apply additive member registration migration to STAGING only
         run: |
           pnpm exec wrangler d1 execute "$STAGE_DB" --remote --yes --config dist/server/wrangler.staging.json --file drizzle/0016_member_registration.sql
+          pnpm exec wrangler d1 execute "$STAGE_DB" --remote --yes --config dist/server/wrangler.staging.json --file drizzle/0017_activate_classroom_registrations.sql
       - name: Deploy isolated staging worker
         run: pnpm exec wrangler deploy --config dist/server/wrangler.staging.json
       - name: Verify registration pages and guarded API endpoints
@@ -99,14 +101,14 @@ jobs:
             exit 1
           fi
           echo "REGISTRATION_STAGING_PASS $STAGE_URL/register"
-      - name: End-to-end synthetic classroom signup and pending-login protection
+      - name: End-to-end synthetic classroom signup and immediate low-privilege login
         shell: bash
         run: |
           node --input-type=module <<'NODE'
           import { randomBytes } from "node:crypto";
           const suffix = randomBytes(6).toString("hex");
           const username = "qa_" + suffix;
-          const password = randomBytes(20).toString("hex");
+          const password = "qa"+randomBytes(3).toString("hex"); // Exactly 8 characters
           const base = process.env.STAGE_URL;
           const registration = await fetch(base + "/api/auth/register", {
             method: "POST",
@@ -126,9 +128,16 @@ jobs:
             headers: { "content-type": "application/json" },
             body: JSON.stringify({username,password}),
           });
-          console.log("Unapproved user login HTTP", response.status);
-          if (response.status !== 403) throw Error("Pending account should be forbidden from login");
-          console.log("STAGING_CLASSROOM_SIGNUP_PASS (synthetic account is inactive; no production data touched)");
+          console.log("New student login HTTP", response.status);
+          if (response.status !== 200) throw Error("Newly registered student should be able to login immediately");
+          const loginData = await response.json();
+          if (loginData.ok !== true) throw Error("Login did not succeed");
+          const cookie = response.headers.get("set-cookie") || "";
+          if (!cookie.includes("hotel_pos_session=")) throw Error("No authenticated session cookie");
+          const profile = await fetch(base + "/api/pos?scope=tables", {headers: {cookie:cookie.split(";")[0]}});
+          const profileData = await profile.json();
+          if (profile.status !== 200 || profileData.profile?.role !== "student") throw Error("New account must have student permissions only");
+          console.log("STAGING_CLASSROOM_SIGNUP_PASS (8-character password, session, student role verified; no production data touched)");
           NODE
       - name: Publish training registration link
         if: always()
