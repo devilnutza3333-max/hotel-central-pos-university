@@ -1,0 +1,1 @@
+Verify live registration form, public input validation, instructor approval permissions and delivery API, without creating a production test account.
