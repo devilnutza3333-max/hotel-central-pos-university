@@ -1,9 +1,21 @@
 import handler from "vinext/server/fetch-handler";
+import { initializeEmptyPosDatabase } from "./pos-d1-first-boot";
 import { runWithConnectorBinding } from "../lib/connector-context";
 import type { ConnectorBinding } from "../lib/connector-contract.mjs";
 
 const worker = {
-  fetch(request: Request, env: Cloudflare.Env, ctx: ExecutionContext<{ CONNECTORS?: ConnectorBinding }>) {
+  async fetch(request: Request, env: Cloudflare.Env, ctx: ExecutionContext<{ CONNECTORS?: ConnectorBinding }>) {
+    // Bootstrap only the VERIFIED empty POS D1, on the first public menu API request.
+    // Never alter an existing POS schema and never run for orders or payments.
+    if (request.method === "GET" && new URL(request.url).pathname === "/api/delivery") {
+      if (!env.DB) return new Response("POS_DATABASE_BINDING_UNAVAILABLE", { status: 503 });
+      try {
+        await initializeEmptyPosDatabase(env.DB);
+      } catch (error) {
+        console.error("POS one-time D1 initialization error", error);
+        return new Response("POS_DATABASE_INITIALIZATION_FAILED", { status: 503 });
+      }
+    }
     let binding = ctx.props?.CONNECTORS;
     // Local preview emulates the same request-scoped capability. This branch and
     // the auxiliary service binding are absent from production builds.
