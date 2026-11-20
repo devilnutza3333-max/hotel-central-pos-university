@@ -1,0 +1,32 @@
+name: Test POS registration locally with isolated D1
+on:
+  push:
+    branches: [main]
+    paths:
+      - "infra/pos-registration-e2e-trigger.txt"
+permissions:
+  contents: read
+jobs:
+  full-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: verify
+      - uses: actions/checkout@v4
+        with:
+          ref: deploy/cloudflare-account-20261120
+          path: pos
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: pnpm/action-setup@v4
+        with:
+          version: "11.25.0"
+      - name: Install existing POS
+        run: cd pos && pnpm install --frozen-lockfile
+      - name: Build Worker
+        run: cd pos && pnpm build
+      - name: Test real signup, login, teacher approval, and student manager delegation on LOCAL D1 ONLY
+        run: cd pos && node ../verify/scripts/test-pos-registration-local.mjs
