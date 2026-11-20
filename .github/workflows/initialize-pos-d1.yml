@@ -17,8 +17,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
-      CLOUDFLARE_API_TOKEN: ${{ secrets.POS_CLOUDFLARE_D1_API_TOKEN }}
-      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.POS_CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: "21dc6a21cc6b21a88c545bf75d39c861"
       EXPECTED_ACCOUNT_ID: "21dc6a21cc6b21a88c545bf75d39c861"
       EXPECTED_DATABASE_ID: "387ccbd0-087e-4714-b3da-d1e58783cee5"
       EXPECTED_DATABASE_NAME: "hotel-central-pos-db"
