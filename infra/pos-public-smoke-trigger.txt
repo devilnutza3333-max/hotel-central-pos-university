@@ -5,3 +5,5 @@ Rerun sanitized live API diagnostic after worker bootstrap branch correction.
 Obtain detailed sanitized SQLite diagnostic from current Cloudflare Worker.
 
 Verify one-time D1 bootstrap with transactional prepared SQL batches.
+
+Continue idempotent bounded D1 migration batches and verify public API.
