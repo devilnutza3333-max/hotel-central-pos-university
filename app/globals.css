@@ -1410,3 +1410,23 @@ button:disabled { cursor:not-allowed; opacity:.5; }
 .pos-approval-item>div:last-child{display:flex;gap:6px}
 .pos-approval-item button{padding:8px 11px;border-radius:8px}
 @media(max-width:570px){.pos-approval-item{align-items:stretch;flex-direction:column}.pos-approval-item>div:last-child button{flex:1}}
+
+
+/* Mobile-friendly, native links always work without client-side hydration. */
+.register-footer{position:relative;z-index:1;margin-top:16px;text-align:center}
+.register-footer a,.pos-native-login-link{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:9px 12px;color:#087761;text-decoration:underline;text-underline-offset:3px;font-size:14px;font-weight:800;cursor:pointer;touch-action:manipulation}
+.register-footer a:hover,.register-footer a:focus-visible{color:#034e41;text-decoration-thickness:2px}
+.pos-change-password-top{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:40px;padding:8px 12px;border:1px solid #d2e1dc;border-radius:10px;background:#edf7f3;color:#0a705d;text-decoration:none;font-size:12px;font-weight:800;white-space:nowrap}
+.pos-change-password-top:focus-visible,.pos-change-password-side:focus-visible{outline:3px solid #50b69f;outline-offset:2px}
+.pos-change-password-side{display:flex;align-items:center;gap:8px;padding:12px;color:#e5f4ee;text-decoration:none;font-size:12px;font-weight:800}
+.pos-change-password-side:hover{background:#194e47;border-radius:9px}
+.pos-password-success{padding:11px;border:1px solid #a3d9c1;border-radius:9px;background:#e7f7ef;color:#0b6650;font-weight:750}
+.pos-password-card{max-width:510px}
+.pos-password-form{display:grid;gap:14px;margin-top:16px}
+.pos-password-form label{display:grid;gap:6px;font-size:14px;font-weight:700;color:#264c43}
+.pos-password-form input{width:100%;min-height:46px;padding:12px;border:1px solid #cfddd6;border-radius:10px;background:white;font:inherit}
+.pos-password-form button{min-height:46px;border:0;border-radius:10px;background:#087761;color:white;font-weight:800;cursor:pointer}
+.pos-password-form button:disabled{opacity:.6;cursor:wait}
+.pos-password-help{font-size:12px;color:#536b63;line-height:1.6}
+.pos-password-back{display:inline-block;margin-top:14px;color:#116d5c;text-decoration:underline;padding:8px 0}
+@media(max-width:760px){.pos-change-password-top{min-width:41px;padding:9px}.pos-change-password-top span{display:none}.pos-change-password-side{display:none}}

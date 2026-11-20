@@ -1,7 +1,6 @@
 "use client";
 
 import { type FormEvent, useState } from "react";
-import Link from "next/link";
 import { BookOpen, CheckCircle2, Copy, GraduationCap, UserPlus } from "lucide-react";
 
 type Kind = "student" | "teacher";
@@ -55,9 +54,9 @@ export default function RegisterPage() {
       <p className="pos-register-warning">โปรดคัดลอกรหัสผ่านเก็บไว้ทันที ระบบจะแสดงรหัสนี้เพียงครั้งเดียว</p>
       <div className="pos-register-credential"><span>ID / เบอร์โทร</span><strong>{result.username}</strong><button type="button" onClick={()=>copy(result.username)} aria-label="คัดลอก ID"><Copy size={16}/></button></div>
       <div className="pos-register-credential"><span>รหัสผ่าน</span><strong>{result.password}</strong><button type="button" onClick={()=>copy(result.password)} aria-label="คัดลอกรหัสผ่าน"><Copy size={16}/></button></div>
-      <Link className="pos-register-login" href="/login">{result.approved?"เข้าสู่ระบบ POS":"กลับไปหน้าเข้าสู่ระบบหลังได้รับอนุมัติ"}</Link>
+      <a className="pos-register-login" href="/login">{result.approved?"เข้าสู่ระบบ POS":"กลับไปหน้าเข้าสู่ระบบหลังได้รับอนุมัติ"}</a>
       <button className="pos-register-another" type="button" onClick={()=>setResult(null)}>สมัครบัญชีอื่น</button>
     </div>}
-    <div className="register-footer"><Link href="/login">มีบัญชีแล้ว? เข้าสู่ระบบ</Link></div>
+    <div className="register-footer"><a className="pos-native-login-link" href="/login">มีบัญชีแล้ว? เข้าสู่ระบบ</a></div>
   </section></main>;
 }
