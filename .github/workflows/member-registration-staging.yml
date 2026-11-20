@@ -1,0 +1,99 @@
+name: Deploy and verify member registration on isolated Hotel POS STAGING
+on:
+  push:
+    branches:
+      - perf/delivery-200-cloudflare-free-staging-20261119
+    paths:
+      - "app/register/**"
+      - "app/registrations/**"
+      - "app/api/auth/register/**"
+      - "app/api/auth/registrations/**"
+      - "app/api/auth/login/**"
+      - "app/login/**"
+      - "app/globals.css"
+      - "db/schema.ts"
+      - "drizzle/0016_member_registration.sql"
+      - "tests/member-registration.test.mjs"
+      - ".github/workflows/member-registration-staging.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: hotel-pos-member-registration-staging
+  cancel-in-progress: false
+jobs:
+  registration-staging:
+    runs-on: ubuntu-latest
+    timeout-minutes: 22
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      STAGING_DATABASE_ID: ec054d8c-0be0-4b97-b61a-634483a3e223
+      STAGE_DB: hotel-pos-delivery-lab-20261119
+      STAGE_URL: https://hotel-central-pos-delivery-lab.markparametbubchaiya.workers.dev
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.25.0
+      - name: Verify target branch and Cloudflare authentication
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF_NAME" = "perf/delivery-200-cloudflare-free-staging-20261119"
+          test -n "$CLOUDFLARE_API_TOKEN"
+          test -n "$CLOUDFLARE_ACCOUNT_ID"
+          test "$STAGING_DATABASE_ID" != "bf87916e-6755-4a4b-8916-ad7a709c573b"
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Test secure membership paths
+        run: |
+          node --test tests/member-registration.test.mjs
+          node --test tests/delivery-perf.test.mjs tests/delivery-manager-controls.test.mjs tests/live-refresh-lite.test.mjs tests/snapshot-scope.test.mjs
+      - name: Build Worker and classroom UI
+        run: |
+          pnpm run build
+          pnpm run build:spa
+          pnpm run attach:spa
+          node --test tests/static-spa-build.test.mjs
+      - name: Prepare isolated staging configuration
+        run: |
+          node scripts/prepare-delivery-stage.mjs
+          node --input-type=module <<'NODE'
+          import fs from "node:fs";
+          const x=JSON.parse(fs.readFileSync("dist/server/wrangler.staging.json","utf8"));
+          if(x.name!=="hotel-central-pos-delivery-lab"||x.d1_databases?.length!==1||
+            x.d1_databases[0].database_id!==process.env.STAGING_DATABASE_ID)
+            throw Error("Staging isolation verification failed");
+          console.log("Verified isolated STAGING Worker + D1");
+          NODE
+      - name: Apply additive member registration migration to STAGING only
+        run: |
+          pnpm exec wrangler d1 execute "$STAGE_DB" --remote --yes --config dist/server/wrangler.staging.json --file drizzle/0016_member_registration.sql
+      - name: Deploy isolated staging worker
+        run: pnpm exec wrangler deploy --config dist/server/wrangler.staging.json
+      - name: Verify public registration route and authorization boundaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          for n in $(seq 1 12); do
+            code="$(curl -sSL -o /tmp/pos-register.html -w '%{http_code}' --max-time 15 "$STAGE_URL/register")"
+            if [[ "$code" == "200" ]] && grep -q "สมัครสมาชิก" /tmp/pos-register.html; then break; fi
+            if [[ "$n" == "12" ]]; then echo "::error::Registration page not available ($code)"; exit 1; fi
+            sleep 5
+          done
+          curl -fsSL --retry 5 --retry-all-errors --retry-delay 2 "$STAGE_URL/login" -o /tmp/pos-login.html
+          grep -q "สมัครสมาชิก" /tmp/pos-login.html
+          code="$(curl -sS -o /tmp/pending-access.json -w '%{http_code}' "$STAGE_URL/api/auth/registrations")"
+          test "$code" = "403"
+          code="$(curl -sS -o /tmp/invalid-registration.json -w '%{http_code}' -X POST -H 'content-type: application/json' -d '{"memberType":"teacher"}' "$STAGE_URL/api/auth/register")"
+          test "$code" = "400"
+          echo "REGISTRATION_STAGING_PASS $STAGE_URL/register"
+      - name: Publish training registration link
+        if: always()
+        run: |
+          echo "Registration (Staging): $STAGE_URL/register" >> "$GITHUB_STEP_SUMMARY"
+          echo "Approvals (teacher/manager only): $STAGE_URL/registrations" >> "$GITHUB_STEP_SUMMARY"
+          echo "Production Worker and D1 were not modified by this workflow." >> "$GITHUB_STEP_SUMMARY"
