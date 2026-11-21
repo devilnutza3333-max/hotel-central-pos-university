@@ -22,10 +22,20 @@ function sqlFile(contents,name){
   cli(["d1","execute","hotel-central-pos-db","--local","--config",config,"--persist-to",persist,"--file",file]);
 }
 async function call(url,options={}){
-  const res=await fetch(BASE+url,{...options,signal:AbortSignal.timeout(20000)});
-  const raw=await res.text();
-  let json=null;try{json=JSON.parse(raw)}catch{}
-  return {status:res.status,body:json,raw,headers:res.headers};
+  // Wrangler --local restarts its dev server when the D1 persistence files
+  // change; this non-production test harness retries that *specific* 503
+  // before a route can be invoked. Never retry actual application errors.
+  for(let attempt=0;attempt<8;attempt++){
+    const res=await fetch(BASE+url,{...options,signal:AbortSignal.timeout(20000)});
+    const raw=await res.text();
+    if(res.status===503 && raw.includes("Your worker restarted mid-request") && attempt<7){
+      await sleep(450+attempt*250);
+      continue;
+    }
+    let json=null;try{json=JSON.parse(raw)}catch{}
+    return {status:res.status,body:json,raw,headers:res.headers};
+  }
+  throw new Error("Local Wrangler dev server repeatedly restarted");
 }
 const post=(url,payload,headers={})=>call(url,{method:"POST",headers:{"content-type":"application/json",...headers},body:JSON.stringify(payload)});
 const cookie=r=>{
