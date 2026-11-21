@@ -1,0 +1,43 @@
+name: Verify mobile POS banner live assets
+on:
+  push:
+    branches: [main]
+    paths: ["infra/pos-mobile-banner-smoke-trigger.txt"]
+permissions:
+  contents: read
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Verify deployed mobile POS copy and live API without customer login
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          const origin="https://hotel-central-pos-university.devilnutza3333.workers.dev";
+          const phrase="ฝึกใช้ POS รับออเดอร์ผ่านมือถือ";
+          const old="ควบคุมทุกโต๊ะจากคอมพิวเตอร์เครื่องเดียว";
+          const delay=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+          for(let attempt=1;attempt<=30;attempt++){
+            try{
+              const [page,delivery]=await Promise.all([fetch(origin+"/",{redirect:"follow"}),fetch(origin+"/api/delivery")]);
+              if(!page.ok||!delivery.ok)throw Error("App or delivery API unavailable");
+              const html=await page.text();
+              const assets=new Set([...html.matchAll(/<(?:script|link)[^>]+(?:src|href)="([^"]+\.js(?:\?[^"]*)?)"/g)].map(x=>new URL(x[1],origin).href));
+              const texts=await Promise.all([...assets].slice(0,50).map(async url=>{
+                try {const r=await fetch(url);return r.ok?(await r.text()):"";}catch{return "";}
+              }));
+              const combined=[html,...texts].join("\n");
+              if(combined.includes(phrase) && !combined.includes(old)){
+                console.log("PASS: Cloudflare serves the mobile POS training headline without the old single-computer copy");
+                console.log("Verified "+assets.size+" script assets; Delivery API HTTP "+delivery.status);
+                process.exit(0);
+              }
+              console.log("Attempt "+attempt+": waiting for new app assets; "+assets.size+" candidate JS files");
+            }catch(error){console.log("Attempt "+attempt+": "+(error instanceof Error?error.message:"network unavailable"));}
+            await delay(12000);
+          }
+          console.error("Production assets did not expose verified new mobile banner copy");
+          process.exit(1);
+          NODE

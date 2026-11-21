@@ -1,0 +1,1 @@
+Confirm Cloudflare now serves the updated phone-first POS banner in its website assets without changing accounts or orders.
