@@ -1,0 +1,1 @@
+Read-only smoke after trainee manager privacy patch; test login, delivery and reject anonymous team listing or role changes. Actual manager authorization is covered by isolated D1 integration tests.

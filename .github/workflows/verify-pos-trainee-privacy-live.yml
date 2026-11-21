@@ -1,0 +1,41 @@
+name: Verify trainee manager privacy patch and live POS (read-only)
+on:
+  push:
+    branches: [main]
+    paths:
+      - "infra/pos-trainee-privacy-smoke-trigger.txt"
+permissions:
+  contents: read
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: deploy/cloudflare-account-20261120
+      - name: Verify deployed branch contains role-based user-list access checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --test tests/trainee-manager-privacy.test.mjs
+          git log -1 --oneline
+      - name: Check live anonymous protection and delivery continuity
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="https://hotel-central-pos-university.devilnutza3333.workers.dev"
+          for i in $(seq 1 12); do
+            login="$(curl -sS --connect-timeout 10 --max-time 25 -o /tmp/pos-role-login.html -w "%{http_code}" "$base/login" || true)"
+            delivery="$(curl -sS --connect-timeout 10 --max-time 25 -o /tmp/pos-role-delivery.json -w "%{http_code}" "$base/api/delivery" || true)"
+            protectedTeam="$(curl -sS --connect-timeout 10 --max-time 25 -o /tmp/pos-role-team.json -w "%{http_code}" "$base/api/pos?scope=team" || true)"
+            protectedChange="$(curl -sS --connect-timeout 10 --max-time 25 -o /tmp/pos-role-change.json -w "%{http_code}" -X POST -H 'content-type: application/json' -d '{"action":"setRole","userId":"untrusted","role":"manager"}' "$base/api/pos" || true)"
+            echo "Attempt $i: login=$login delivery=$delivery anonymousTeam=$protectedTeam anonymousSetRole=$protectedChange"
+            if [[ "$login" == "200" && "$delivery" == "200" && "$protectedTeam" == "401" && "$protectedChange" == "401" ]]; then
+              echo "PASS: live POS is available, accounts API requires auth, unauthenticated role mutation denied"
+              exit 0
+            fi
+            sleep 15
+          done
+          echo "::error::Live POS did not pass non-mutating public checks"
+          exit 1
