@@ -104,10 +104,18 @@ try{
   // first profile GET creates the optional table. Let that local restart settle.
   await sleep(1500);
   const testPng="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j+YcAAAAASUVORK5CYII=";
-  const uploadPhoto=await call("/api/account/profile",{
-    method:"PUT",headers:{"content-type":"application/json",cookie:studentCookie},
-    body:JSON.stringify({avatarData:testPng,userId:"someone-else"}),
-  });
+  // The local Wrangler filesystem watcher can restart the Worker just after
+  // its first new D1 table appears. Retry this one idempotent photo upsert
+  // only on the watcher's documented transient 503, never on app errors.
+  let uploadPhoto;
+  for (let attempt=0; attempt<6; attempt++) {
+    uploadPhoto=await call("/api/account/profile",{
+      method:"PUT",headers:{"content-type":"application/json",cookie:studentCookie},
+      body:JSON.stringify({avatarData:testPng,userId:"someone-else"}),
+    });
+    if (uploadPhoto.status!==503) break;
+    await sleep(1000+attempt*500);
+  }
   assert.equal(uploadPhoto.status,200,"Student photo upload: "+uploadPhoto.raw.slice(0,350));
   const savedPhoto=await call("/api/account/profile",{headers:{cookie:studentCookie}});
   assert.equal(savedPhoto.body?.avatarData,testPng,"Photo stored for signed-in member only");
