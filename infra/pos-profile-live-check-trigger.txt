@@ -1,0 +1,1 @@
+Verify production mobile member profile page, protected photo upload endpoint, POST Logout, login page, and delivery; no production account mutations.
