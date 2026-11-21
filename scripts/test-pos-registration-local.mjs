@@ -150,6 +150,9 @@ try{
 
   const teacherRequest=approvals.body?.requests?.find(x=>x.phone==="0822345670");
   assert.ok(teacherRequest,"Teacher request must appear on approval screen");
+  // Wrangler's local D1 watcher may restart when a newly introduced route is loaded.
+  // Delay only in the isolated test environment, never in production business logic.
+  await sleep(1800);
   const approved=await call("/api/auth/registrations",{method:"PATCH",headers:{"content-type":"application/json",cookie:rootCookie},body:JSON.stringify({userId:teacherRequest.userId,decision:"approve"})});
   assert.equal(approved.status,200,"Teacher approval: "+approved.raw.slice(0,400));
   const teacherLogin=await post("/api/auth/login",{username:"0822345670",password:teacherPassword});
@@ -179,6 +182,7 @@ try{
   const deniedTeacherReset=await post("/api/controller/accounts",{action:"issueTemporaryPassword",userId:student.id},{cookie:teacherCookie});
   assert.equal(deniedTeacherReset.status,403,"Teachers cannot issue controller recovery credentials");
   const oldStudentPassword=studentPassword;
+  await sleep(1500);
   const reissue=await post("/api/controller/accounts",{action:"issueTemporaryPassword",userId:student.id},{cookie:rootCookie});
   assert.equal(reissue.status,200,"Controller reissues student password: "+reissue.raw.slice(0,300));
   assert.ok(reissue.body?.temporaryPassword?.length>=20,"New strong password issued");
