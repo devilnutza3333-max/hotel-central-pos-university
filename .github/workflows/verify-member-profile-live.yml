@@ -1,0 +1,34 @@
+name: Verify live Hotel POS member profiles and logout (read-only)
+on:
+  push:
+    branches: [main]
+    paths:
+      - "infra/pos-profile-live-check-trigger.txt"
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    steps:
+      - name: Confirm member profile page, upload security and logout on Cloudflare
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="https://hotel-central-pos-university.devilnutza3333.workers.dev"
+          for i in $(seq 1 36); do
+            profile="$(curl -sS --connect-timeout 10 --max-time 30 -o /tmp/pos-profile.html -w "%{http_code}" "$base/account/profile" || true)"
+            login="$(curl -sS --connect-timeout 10 --max-time 30 -o /tmp/pos-login.html -w "%{http_code}" "$base/login" || true)"
+            unauthorized="$(curl -sS --connect-timeout 10 --max-time 30 -o /tmp/pos-profile-api.json -w "%{http_code}" "$base/api/account/profile" || true)"
+            uploadDenied="$(curl -sS --connect-timeout 10 --max-time 30 -o /tmp/pos-profile-put.json -w "%{http_code}" -X PUT -H 'content-type: application/json' --data '{"avatarData":null}' "$base/api/account/profile" || true)"
+            logout="$(curl -sS --connect-timeout 10 --max-time 30 -o /tmp/pos-logout-result.html -w "%{http_code}" -X POST "$base/api/auth/logout" || true)"
+            delivery="$(curl -sS --connect-timeout 10 --max-time 30 -o /tmp/pos-delivery-response.json -w "%{http_code}" "$base/api/delivery" || true)"
+            echo "Attempt $i: profile=$profile login=$login anonProfile=$unauthorized anonUpload=$uploadDenied logout=$logout delivery=$delivery"
+            if [[ "$profile" == 200 && "$login" == 200 && "$unauthorized" == 401 && "$uploadDenied" == 401 && "$logout" == 303 && "$delivery" == 200 ]]; then
+              echo "PASS: member profile page online, private photo API authenticated, logout redirects, delivery unaffected"
+              exit 0
+            fi
+            sleep 15
+          done
+          echo "::error::Production member profile not yet ready"
+          exit 1
