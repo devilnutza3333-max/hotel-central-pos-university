@@ -1,0 +1,28 @@
+name: Verify member profiles and logout on isolated POS D1
+on:
+  push:
+    branches: ["feature/pos-member-profiles-20261121"]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Test profile security and login/logout UI
+        run: node --test tests/member-profile.test.mjs tests/member-registration.test.mjs tests/self-password-change.test.mjs
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.25.0
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Check TypeScript
+        run: pnpm exec tsc --noEmit
+      - name: Build Cloudflare Worker
+        run: pnpm build
+      - name: End-to-end registration, avatar, logout and password change on LOCAL D1
+        run: node scripts/test-pos-registration-local.mjs

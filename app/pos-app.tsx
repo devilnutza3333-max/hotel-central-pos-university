@@ -237,6 +237,7 @@ export default function PosApp({ signedInUser }: { signedInUser: { id: string; n
   const [error, setError] = useState("");
   const [lastAlert, setLastAlert] = useState("");
   const [online, setOnline] = useState(true);
+  const [memberAvatar, setMemberAvatar] = useState("");
   const [offlineQueue, setOfflineQueue] = useState<OfflineQueueSnapshot>(emptyOfflineSnapshot);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [operationsOpen, setOperationsOpen] = useState(false);
@@ -249,6 +250,15 @@ export default function PosApp({ signedInUser }: { signedInUser: { id: string; n
   const offlineQueueRef = useRef<OfflineActionQueue | null>(null);
 
   useEffect(() => { soundPlayRef.current = sound.play; }, [sound.play]);
+  useEffect(() => {
+    if (!data?.profile.id) return;
+    let cancelled = false;
+    void fetch("/api/account/profile", { cache: "no-store" })
+      .then(async response => response.ok ? response.json() as Promise<{ avatarData?: string }> : null)
+      .then(result => { if (!cancelled) setMemberAvatar(result?.avatarData || ""); })
+      .catch(() => { if (!cancelled) setMemberAvatar(""); });
+    return () => { cancelled = true; };
+  }, [data?.profile.id]);
 
   const load = useCallback(async (quiet = false, announce = false, scopeOverride?: View, mode: "full" | "live" = "full") => {
     if (!quiet) setLoading(true);
@@ -512,13 +522,14 @@ export default function PosApp({ signedInUser }: { signedInUser: { id: string; n
         <nav>{nav.map(({ id, label, icon: Icon, badge }) => <button key={id} className={view === id ? "active" : ""} onClick={() => { setView(id); if (id !== "tables") setSelectedTable(null); }}><span className="nav-icon-wrap"><Icon size={19}/>{Boolean(badge) && <b className="nav-count-badge">{badgeText(badge ?? 0)}</b>}</span><span>{label}</span></button>)}</nav>
         <div className="mode-card"><BookOpenCheck size={20}/><div><b>PRE-PRODUCTION</b><small>ระบบทดสอบก่อนเปิดร้านจริง</small></div></div>
         <a className="pos-change-password-side" href="/account/password"><KeyRound size={17}/> เปลี่ยนรหัสผ่านของฉัน</a>
-        <a className="signout" href={signedInUser.signOutUrl}><LogOut size={17}/> ออกจากระบบ</a>
+        <a className="pos-profile-side" href="/account/profile"><CircleUserRound size={17}/> โปรไฟล์ของฉัน</a>
+        <form className="pos-side-logout" action="/api/auth/logout" method="post"><button type="submit" className="signout"><LogOut size={17}/> ออกจากระบบ</button></form>
       </aside>
 
       <section className="workspace">
         <header className="topbar">
           <div><p className="eyebrow">ห้องอาหารโรงแรมมหาวิทยาลัย</p><h1>{view === "dashboard" ? "ศูนย์ควบคุม" : view === "duty" ? "หน้าที่ประจำกะ" : view === "host" ? "จอพนักงานต้อนรับ" : view === "operations" ? "ควบคุมเปิด–ปิดร้าน" : view === "readiness" ? "ตรวจความพร้อมก่อนเปิดร้าน" : view === "service" ? "คำขอบริการจากโต๊ะ" : view === "finance" ? "กะและการเงิน" : view === "audit" ? "ประวัติการทำรายการ" : view === "table_qr" ? "QR สั่งอาหารประจำโต๊ะ" : view === "kitchen" ? "จอครัวกลาง" : view === "bar" ? "จอบาร์เครื่องดื่ม" : view === "delivery" ? "เดลิเวอรีในมหาวิทยาลัย" : view === "menu" ? "จัดการเมนู" : view === "costing" ? "สูตรอาหารและต้นทุน" : view === "inventory" ? "สต๊อกสินค้า" : view === "stock_count" ? "ตรวจนับสต๊อกประจำวัน" : view === "team" ? "จัดการผู้ใช้งาน" : selectedTable ? `โต๊ะ ${selectedTable}` : "แผนผังโต๊ะ"}</h1></div>
-          <div className="top-actions"><button className="icon-button attention-button" title="รายการที่ต้องดำเนินการ" onClick={() => { setView(serviceBadge ? "service" : kitchenBadge && management ? "kitchen" : barBadge && management ? "bar" : deliveryBadge ? "delivery" : "tables"); setSelectedTable(null); }}><BellRing size={18}/>{totalAttentionBadge > 0 && <b className="top-count-badge">{badgeText(totalAttentionBadge)}</b>}</button><button className={`icon-button sound-toggle ${sound.enabled && sound.ready ? "active" : ""}`} title={sound.enabled && sound.ready ? "ปิดเสียงแจ้งเตือน" : "เปิดเสียงแจ้งเตือน"} onClick={() => void sound.handleButton()}>{sound.enabled && sound.ready ? <Volume2 size={18}/> : <VolumeX size={18}/>}</button><button className="icon-button refresh-button" title="รีเฟรช" onClick={() => void load()}><RefreshCw size={18}/></button><div className={`online ${online ? "" : "offline"}`}><i/> {online ? "เชื่อมต่อระบบกลาง" : "ออฟไลน์ • กำลังลองใหม่"}</div><a className="pos-change-password-top" href="/account/password"><KeyRound size={16}/> <span>เปลี่ยนรหัสผ่าน</span></a><div className="profile"><CircleUserRound/><span><b>{data.profile.name}</b><small>{roleLabels[data.profile.role]}</small></span></div></div>
+          <div className="top-actions"><button className="icon-button attention-button" title="รายการที่ต้องดำเนินการ" onClick={() => { setView(serviceBadge ? "service" : kitchenBadge && management ? "kitchen" : barBadge && management ? "bar" : deliveryBadge ? "delivery" : "tables"); setSelectedTable(null); }}><BellRing size={18}/>{totalAttentionBadge > 0 && <b className="top-count-badge">{badgeText(totalAttentionBadge)}</b>}</button><button className={`icon-button sound-toggle ${sound.enabled && sound.ready ? "active" : ""}`} title={sound.enabled && sound.ready ? "ปิดเสียงแจ้งเตือน" : "เปิดเสียงแจ้งเตือน"} onClick={() => void sound.handleButton()}>{sound.enabled && sound.ready ? <Volume2 size={18}/> : <VolumeX size={18}/>}</button><button className="icon-button refresh-button" title="รีเฟรช" onClick={() => void load()}><RefreshCw size={18}/></button><div className={`online ${online ? "" : "offline"}`}><i/> {online ? "เชื่อมต่อระบบกลาง" : "ออฟไลน์ • กำลังลองใหม่"}</div><a className="pos-change-password-top" href="/account/password"><KeyRound size={16}/> <span>เปลี่ยนรหัสผ่าน</span></a><a className="profile pos-profile-link" href="/account/profile" title="โปรไฟล์ของฉัน">{memberAvatar ? <img className="pos-header-avatar" src={memberAvatar} alt="รูปโปรไฟล์"/> : <CircleUserRound/>}<span><b>{data.profile.name}</b><small>{roleLabels[data.profile.role]}</small></span></a><form className="pos-logout-top" action="/api/auth/logout" method="post"><button type="submit" className="icon-button pos-logout-button" title="ออกจากระบบ" aria-label="ออกจากระบบ"><LogOut size={19}/></button></form></div>
         </header>
 
         {error && <div className="alert">{error}<button onClick={() => setError("")}>×</button></div>}

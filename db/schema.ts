@@ -409,3 +409,10 @@ export const registrationRequests = sqliteTable("registration_requests", {
   reviewedAt: integer("reviewed_at", { mode: "timestamp" }),
   reviewedBy: text("reviewed_by"),
 }, table => [index("registration_requests_status_created_idx").on(table.status, table.createdAt)]);
+
+/** Profile photo is private to the signed-in member. A compact data URI lives in D1; no R2 billing. */
+export const memberProfiles = sqliteTable("member_profiles", {
+  userId: text("user_id").primaryKey(),
+  avatarData: text("avatar_data").notNull().default(""),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
+});

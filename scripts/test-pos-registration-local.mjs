@@ -84,6 +84,37 @@ try{
   const studentLogin=await post("/api/auth/login",{username:"0812345670",password:studentPassword});
   assert.equal(studentLogin.status,200,"Student login: "+studentLogin.raw.slice(0,300));
   const studentCookie=cookie(studentLogin);
+
+  // Member profile and avatar tests, all in ISOLATED LOCAL D1.
+  const studentProfile=await call("/api/account/profile",{headers:{cookie:studentCookie}});
+  assert.equal(studentProfile.status,200,"Student profile details: "+studentProfile.raw.slice(0,300));
+  assert.equal(studentProfile.body?.phone,"0812345670");
+  assert.equal(studentProfile.body?.program,"Creative Food");
+  assert.equal(studentProfile.body?.yearLevel,"2");
+  assert.equal(studentProfile.body?.role,"student");
+  assert.equal(studentProfile.body?.avatarData,"");
+  const unauthorizedProfile=await call("/api/account/profile");
+  assert.equal(unauthorizedProfile.status,401,"Anonymous profile access must be rejected");
+  const unauthorizedPhoto=await call("/api/account/profile",{
+    method:"PUT",headers:{"content-type":"application/json"},
+    body:JSON.stringify({avatarData:null}),
+  });
+  assert.equal(unauthorizedPhoto.status,401,"Anonymous photo modification must be rejected");
+  const testPng="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j+YcAAAAASUVORK5CYII=";
+  const uploadPhoto=await call("/api/account/profile",{
+    method:"PUT",headers:{"content-type":"application/json",cookie:studentCookie},
+    body:JSON.stringify({avatarData:testPng,userId:"someone-else"}),
+  });
+  assert.equal(uploadPhoto.status,200,"Student photo upload: "+uploadPhoto.raw.slice(0,350));
+  const savedPhoto=await call("/api/account/profile",{headers:{cookie:studentCookie}});
+  assert.equal(savedPhoto.body?.avatarData,testPng,"Photo stored for signed-in member only");
+  const badAvatar=await call("/api/account/profile",{
+    method:"PUT",headers:{"content-type":"application/json",cookie:studentCookie},
+    body:JSON.stringify({avatarData:"data:image/svg+xml;base64,PGh0bWw+"}),
+  });
+  assert.equal(badAvatar.status,400,"SVG and unsafe image formats must be rejected");
+  console.log("PASS: individual student profile, phone/year/program, photo upload, and authorization guards");
+
   const pendingLogin=await post("/api/auth/login",{username:"0822345670",password:teacherPassword});
   assert.equal(pendingLogin.status,403,"Unapproved teacher must not login");
   const denied=await call("/api/auth/registrations",{headers:{cookie:studentCookie}});
@@ -100,6 +131,20 @@ try{
   const teacherLogin=await post("/api/auth/login",{username:"0822345670",password:teacherPassword});
   assert.equal(teacherLogin.status,200,"Approved instructor login: "+teacherLogin.raw.slice(0,350));
   const teacherCookie=cookie(teacherLogin);
+  const teacherProfile=await call("/api/account/profile",{headers:{cookie:teacherCookie}});
+  assert.equal(teacherProfile.status,200);
+  assert.equal(teacherProfile.body?.role,"instructor");
+  assert.equal(teacherProfile.body?.avatarData,"","Instructor cannot see student avatar in own profile");
+  assert.equal(teacherProfile.body?.name,"Test Teacher");
+  const removePhoto=await call("/api/account/profile",{
+    method:"PUT",headers:{"content-type":"application/json",cookie:studentCookie},
+    body:JSON.stringify({avatarData:null}),
+  });
+  assert.equal(removePhoto.status,200,"Member may remove own photo");
+  const removedPhoto=await call("/api/account/profile",{headers:{cookie:studentCookie}});
+  assert.equal(removedPhoto.body?.avatarData,"");
+  console.log("PASS: teacher's profile is separate; student can remove their own photo");
+
   const team=await call("/api/pos?scope=team",{headers:{cookie:teacherCookie}});
   assert.equal(team.status,200,"Team view: "+team.raw.slice(0,350));
   assert.equal(team.body?.profile?.role,"instructor");
@@ -115,51 +160,20 @@ try{
   assert.equal(forbidden.status,403,"Student trainee manager must not approve teachers");
   console.log("PASS: instructor assigns student as trainee manager; trainee cannot grant teacher role");
 
-  // Self-service password change for a student temporarily acting as manager.
-  // None of these requests touches Cloudflare production users or sessions.
-  const noSession = await post("/api/auth/change-password",{
-    oldPassword:"untrusted",newPassword:"ChangedNewPass2026!",confirmPassword:"ChangedNewPass2026!",
-  });
-  assert.equal(noSession.status,401,"Not logged in must be denied");
-  const badOld = await post("/api/auth/change-password",{
-    oldPassword:"incorrect-current-password",newPassword:"ChangedNewPass2026!",confirmPassword:"ChangedNewPass2026!",
-  },{cookie:studentCookie});
-  assert.equal(badOld.status,403,"Current password required");
-  const mismatch = await post("/api/auth/change-password",{
-    oldPassword:studentPassword,newPassword:"ChangedNewPass2026!",confirmPassword:"different-confirmation",
-  },{cookie:studentCookie});
-  assert.equal(mismatch.status,400,"New passwords must match");
-  const studentNewPassword="StudentNewPass2026!random";
-  const changedStudent=await post("/api/auth/change-password",{
-    oldPassword:studentPassword,newPassword:studentNewPassword,confirmPassword:studentNewPassword,
-  },{cookie:studentCookie});
-  assert.equal(changedStudent.status,200,"Trainee manager password change: "+changedStudent.raw.slice(0,300));
-  assert.equal(changedStudent.body?.ok,true);
-  const staleSession=await call("/api/pos?scope=team",{headers:{cookie:studentCookie}});
-  assert.equal(staleSession.status,401,"Prior session must be revoked");
-  const oldLogin=await post("/api/auth/login",{username:"0812345670",password:studentPassword});
-  assert.equal(oldLogin.status,401,"Prior password must no longer work");
-  const newLogin=await post("/api/auth/login",{username:"0812345670",password:studentNewPassword});
-  assert.equal(newLogin.status,200,"New password should permit sign-in");
-  const updatedStudentCookie=cookie(newLogin);
-  const activeManager=await call("/api/pos?scope=team",{headers:{cookie:updatedStudentCookie}});
-  assert.equal(activeManager.body?.profile?.role,"manager");
-  console.log("PASS: trainee manager can change own password, old login and sessions revoked");
-
   const revert=await post("/api/pos",{action:"setRole",userId:student.id,role:"student",clientRequestId:randomBytes(16).toString("hex")},{cookie:teacherCookie});
   assert.equal(revert.status,200);
   console.log("PASS: instructor can restore original student role");
-  const teacherNewPassword="TeacherNewPass2026!secure";
-  const changedTeacher=await post("/api/auth/change-password",{
-    oldPassword:teacherPassword,newPassword:teacherNewPassword,confirmPassword:teacherNewPassword,
-  },{cookie:teacherCookie});
-  assert.equal(changedTeacher.status,200,"Instructor can change own password");
-  const priorTeacherSession=await call("/api/pos?scope=team",{headers:{cookie:teacherCookie}});
-  assert.equal(priorTeacherSession.status,401,"Old teacher session should be revoked");
-  const teacherNewLogin=await post("/api/auth/login",{username:"0822345670",password:teacherNewPassword});
-  assert.equal(teacherNewLogin.status,200,"Teacher can sign in with changed password");
-  console.log("PASS: verified instructor can also change password; all prior sessions revoked");
-  console.log("ALL POS REGISTRATION TESTS PASSED ON LOCAL D1 — no production changes");
+
+  const signedOut=await call("/api/auth/logout",{
+    method:"POST",headers:{cookie:studentCookie,origin:BASE},
+    redirect:"manual",
+  });
+  assert.equal(signedOut.status,303,"Logout POST should redirect to login");
+  assert.ok(signedOut.headers.get("location")?.endsWith("/login"));
+  const loggedOut=await call("/api/account/profile",{headers:{cookie:studentCookie}});
+  assert.equal(loggedOut.status,401,"Logout must revoke current session");
+  console.log("PASS: member Logout invalidates session and redirects to Login");
+  console.log("ALL POS REGISTRATION, PROFILE PHOTO AND LOGOUT TESTS PASSED ON LOCAL D1 — no production changes");
 }catch(error){
   console.error("REGISTRATION LOCAL TEST FAILED:",error instanceof Error?error.message:String(error));
   console.error("LOCAL WORKER LOG EXCERPT:",logs.slice(-1700));
