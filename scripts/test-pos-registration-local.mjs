@@ -157,8 +157,22 @@ try{
 
   const promote=await post("/api/pos",{action:"setRole",userId:student.id,role:"manager",clientRequestId:randomBytes(16).toString("hex")},{cookie:teacherCookie});
   assert.equal(promote.status,200,"Teacher promotion: "+promote.raw.slice(0,400));
-  const studentManagement=await call("/api/pos?scope=team",{headers:{cookie:studentCookie}});
+  // Promotion must not permit access to the user list: never send roster for any scope.
+  const traineeTeam=await call("/api/pos?scope=team",{headers:{cookie:studentCookie}});
+  assert.equal(traineeTeam.status,403,"Student manager must be blocked from team API");
+  assert.equal(traineeTeam.body?.users,undefined,"Forbidden team API must return no user roster");
+  for (const scope of ["dashboard","duty","audit"]) {
+    const view=await call("/api/pos?scope="+scope,{headers:{cookie:studentCookie}});
+    assert.equal(view.status,200,"Trainee manager should keep restaurant access for "+scope);
+    assert.equal(view.body?.profile?.role,"manager");
+    assert.equal(view.body?.users,undefined,"No roster must be exposed to trainee via "+scope);
+  }
+  const studentManagement=await call("/api/pos?scope=dashboard",{headers:{cookie:studentCookie}});
   assert.equal(studentManagement.body?.profile?.role,"manager");
+  const controllerTeam=await call("/api/pos?scope=team",{headers:{cookie:rootCookie}});
+  assert.equal(controllerTeam.status,200,"Original controller must retain team visibility");
+  assert.ok(controllerTeam.body?.users?.some(user=>user.id===student.id),"Controller sees user roster");
+  console.log("PASS: trainee manager denied team roster from all scopes; instructor and controller retain access");
   const forbidden=await call("/api/auth/registrations",{headers:{cookie:studentCookie}});
   assert.equal(forbidden.status,403,"Student trainee manager must not approve teachers");
   console.log("PASS: instructor assigns student as trainee manager; trainee cannot grant teacher role");

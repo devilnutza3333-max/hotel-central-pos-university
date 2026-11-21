@@ -300,8 +300,13 @@ export async function GET(request: Request) {
   if (!profile?.active) return NextResponse.json({ error: "บัญชีนี้ถูกระงับ" }, { status: 403 });
   const db = getDb();
   const management = managementRoles.has(profile.role);
+  const canViewUsers = profile.role === "instructor" || (profile.role === "manager" && profile.id === "pos_mgr_cb5d4d0b40dadedb79c21010");
   const params = new URL(request.url).searchParams;
   const scope = params.get("scope") ?? "tables";
+  // Never expose the full account roster by calling the API directly.
+  if (scope === "team" && !canViewUsers) {
+    return NextResponse.json({ error: "เฉพาะอาจารย์และผู้ควบคุมระบบเท่านั้นที่ดูบัญชีผู้ใช้งานได้" }, { status: 403, headers: { "cache-control": "no-store" } });
+  }
   // Lightweight polling keeps the existing React UI and all operations, but
   // does not reread the comparatively static menu, pictures and settings.
   // The client merges this partial response into the initial full snapshot.
@@ -322,7 +327,7 @@ export async function GET(request: Request) {
   const needsMenuAdmin = management && ["menu", "costing"].includes(scope);
   const needsOperations = management && scope === "operations";
   const needsInventory = management && ["menu", "costing", "inventory", "stock_count", "operations"].includes(scope);
-  const needsUsers = management && ["team", "dashboard", "audit", "duty", "readiness", "stock_count"].includes(scope);
+  const needsUsers = canViewUsers && ["team", "dashboard", "audit", "duty", "readiness", "stock_count"].includes(scope);
   const needsHost = hostAccess && scope === "host";
   const needsReadiness = management && scope === "readiness";
   const needsStockCount = management && scope === "stock_count";

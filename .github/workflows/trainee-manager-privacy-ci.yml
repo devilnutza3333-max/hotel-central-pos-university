@@ -1,0 +1,28 @@
+name: Test student manager team visibility restriction
+on:
+  push:
+    branches: ["feature/manager-team-privacy-20261121"]
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Test role isolation and user navigation
+        run: node --test tests/trainee-manager-privacy.test.mjs tests/member-profile.test.mjs tests/member-registration.test.mjs tests/self-password-change.test.mjs
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.25.0
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Typecheck
+        run: pnpm exec tsc --noEmit
+      - name: Build Cloudflare Worker
+        run: pnpm build
+      - name: Exercise student-manager access and instructor/controller visibility on isolated D1
+        run: node scripts/test-pos-registration-local.mjs

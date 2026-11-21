@@ -424,6 +424,9 @@ export default function PosApp({ signedInUser }: { signedInUser: { id: string; n
   const selectedOrder = selectedTable ? activeOrders.find((order) => order.tableId === selectedTable) : undefined;
   const selectedItems = selectedOrder ? data?.items.filter((item) => item.orderId === selectedOrder.id) ?? [] : [];
   const management = data ? ["instructor", "manager"].includes(data.profile.role) : false;
+  // Trainee managers may operate the restaurant, but only instructors and the original
+  // controller may inspect account lists or enter the user management screen.
+  const canViewUsers = data ? data.profile.role === "instructor" || (data.profile.role === "manager" && data.profile.id === "pos_mgr_cb5d4d0b40dadedb79c21010") : false;
   const dutyStationSet = new Set(data?.dutyStations ?? []);
   const canOperateTables = management || data?.profile.role === "cashier" || dutyStationSet.has("host") || dutyStationSet.has("service") || dutyStationSet.has("cashier_trainee");
   const canHost = management || dutyStationSet.has("host");
@@ -476,7 +479,12 @@ export default function PosApp({ signedInUser }: { signedInUser: { id: string; n
   });
 
   useEffect(() => {
-    if (!data || management) return;
+    if (!data) return;
+    if (management) {
+      // Recheck whenever the server profile changes (including role demotion).
+      if (view === "team" && !canViewUsers) setView("dashboard");
+      return;
+    }
     const allowed = new Set<View>(["duty"]);
     if (canHost) allowed.add("host");
     if (canOperateTables) allowed.add("tables");
@@ -486,7 +494,7 @@ export default function PosApp({ signedInUser }: { signedInUser: { id: string; n
     if (canDelivery) allowed.add("delivery");
     if (canPay) allowed.add("finance");
     if (!allowed.has(view)) setView("duty");
-  }, [canBar, canDelivery, canHandleService, canHost, canKitchen, canOperateTables, canPay, data, management, view]);
+  }, [canBar, canDelivery, canHandleService, canHost, canKitchen, canOperateTables, canPay, canViewUsers, data, management, view]);
 
   const chooseTable = async (tableId: number) => {
     setSelectedTable(tableId);
@@ -512,7 +520,8 @@ export default function PosApp({ signedInUser }: { signedInUser: { id: string; n
     ...(!management && canKitchen ? [{ id: "kitchen" as View, label: "จอครัว", icon: ChefHat, badge: kitchenBadge }] : []),
     ...(!management && canBar ? [{ id: "bar" as View, label: "จอบาร์ / เครื่องดื่ม", icon: Coffee, badge: barBadge }] : []),
     ...(!management && canDelivery ? [{ id: "delivery" as View, label: "งานส่งอาหาร", icon: Truck, badge: deliveryBadge }] : []),
-    ...(management ? [{ id: "table_qr" as View, label: "QR ประจำโต๊ะ", icon: QrCode }, { id: "kitchen" as View, label: "จอครัว", icon: ChefHat, badge: kitchenBadge }, { id: "bar" as View, label: "จอบาร์ / เครื่องดื่ม", icon: Coffee, badge: barBadge }, { id: "delivery" as View, label: "เดลิเวอรี", icon: Truck, badge: deliveryBadge }, { id: "menu" as View, label: "จัดการเมนู", icon: UtensilsCrossed }, { id: "costing" as View, label: "สูตร / ต้นทุน", icon: Calculator }, { id: "inventory" as View, label: "สต๊อกสินค้า", icon: PackageSearch }, { id: "stock_count" as View, label: "ตรวจนับสต๊อก", icon: ClipboardCheck }, { id: "operations" as View, label: "เปิด–ปิดร้าน", icon: Store }, { id: "readiness" as View, label: "ตรวจความพร้อม", icon: MonitorCog }, { id: "audit" as View, label: "ประวัติการแก้ไข", icon: History }, { id: "team" as View, label: "ผู้ใช้งาน", icon: UsersRound }] : []),
+    ...(management ? [{ id: "table_qr" as View, label: "QR ประจำโต๊ะ", icon: QrCode }, { id: "kitchen" as View, label: "จอครัว", icon: ChefHat, badge: kitchenBadge }, { id: "bar" as View, label: "จอบาร์ / เครื่องดื่ม", icon: Coffee, badge: barBadge }, { id: "delivery" as View, label: "เดลิเวอรี", icon: Truck, badge: deliveryBadge }, { id: "menu" as View, label: "จัดการเมนู", icon: UtensilsCrossed }, { id: "costing" as View, label: "สูตร / ต้นทุน", icon: Calculator }, { id: "inventory" as View, label: "สต๊อกสินค้า", icon: PackageSearch }, { id: "stock_count" as View, label: "ตรวจนับสต๊อก", icon: ClipboardCheck }, { id: "operations" as View, label: "เปิด–ปิดร้าน", icon: Store }, { id: "readiness" as View, label: "ตรวจความพร้อม", icon: MonitorCog }, { id: "audit" as View, label: "ประวัติการแก้ไข", icon: History }] : []),
+    ...(canViewUsers ? [{ id: "team" as View, label: "ผู้ใช้งาน", icon: UsersRound }] : []),
   ];
 
   return (
@@ -556,7 +565,7 @@ export default function PosApp({ signedInUser }: { signedInUser: { id: string; n
         {view === "stock_count" && management && <StockCountPanel serviceDate={serviceDate} profileName={data.profile.name} canApprove={management} inventory={data.inventory} sessions={data.stockCountSessions} lines={data.stockCountLines} working={working} onAction={(body) => act(body).then(Boolean)} />}
         {view === "finance" && canPay && <ShiftPanel shifts={data.shifts} movements={data.cashMovements} payments={data.payments} orders={data.orders} settings={data.billingSettings} working={working} management={management} instructor={data.profile.role === "instructor"} onAction={(body) => act(body).then(Boolean)} onOpenReceipt={(orderId) => { const order = data.orders.find((row) => row.id === orderId); if (order) setReceipt({ order, items: data.items.filter((item) => item.orderId === orderId), payments: data.payments.filter((payment) => payment.orderId === orderId) }); }} />}
         {view === "audit" && management && <AuditPanel logs={data.logs} />}
-        {view === "team" && management && <Team users={data.users} current={data.profile} working={working} onRole={(userId, role) => void act({ action: "setRole", userId, role })} onCreate={(account) => act({ action: "createUser", ...account }).then(Boolean)} onReset={(userId, password) => act({ action: "resetPassword", userId, password }).then(Boolean)} />}
+        {view === "team" && canViewUsers && <Team users={data.users} current={data.profile} working={working} onRole={(userId, role) => void act({ action: "setRole", userId, role })} onCreate={(account) => act({ action: "createUser", ...account }).then(Boolean)} onReset={(userId, password) => act({ action: "resetPassword", userId, password }).then(Boolean)} />}
       </section>
 
       {checkoutOpen && selectedOrder && <CheckoutModal order={selectedOrder} items={selectedItems} settings={data.billingSettings} hasOpenShift={data.shifts.some((shift) => shift.status === "open")} working={working} onClose={() => setCheckoutOpen(false)} onApply={(values) => act({ action: "updateOrderCharges", orderId: selectedOrder.id, ...values }).then(Boolean)} onPay={async (values) => {
