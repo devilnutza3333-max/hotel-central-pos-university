@@ -1,0 +1,1 @@
+Read-only smoke checks for restricted controller password-recovery page on existing Cloudflare POS. Do not reset any real account.

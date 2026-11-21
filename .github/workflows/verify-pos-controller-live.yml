@@ -1,0 +1,33 @@
+name: Verify owner account recovery on live POS without resetting anyone
+on:
+  push:
+    branches: [main]
+    paths:
+      - "infra/pos-controller-live-smoke-trigger.txt"
+permissions:
+  contents: read
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Verify protected controller page and API, login and delivery
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="https://hotel-central-pos-university.devilnutza3333.workers.dev"
+          for i in $(seq 1 30); do
+            page="$(curl -sS --connect-timeout 10 --max-time 25 -o /tmp/owner-page.html -w "%{http_code}" "$base/controller/accounts" || true)"
+            anonymousList="$(curl -sS --connect-timeout 10 --max-time 25 -o /tmp/owner-list.json -w "%{http_code}" "$base/api/controller/accounts" || true)"
+            anonymousReset="$(curl -sS --connect-timeout 10 --max-time 25 -o /tmp/owner-reset.json -w "%{http_code}" -X POST -H 'content-type: application/json' --data '{"action":"issueTemporaryPassword","userId":"not-a-real-user"}' "$base/api/controller/accounts" || true)"
+            login="$(curl -sS --connect-timeout 10 --max-time 25 -o /tmp/owner-login.html -w "%{http_code}" "$base/login" || true)"
+            delivery="$(curl -sS --connect-timeout 10 --max-time 25 -o /tmp/owner-delivery.json -w "%{http_code}" "$base/api/delivery" || true)"
+            echo "Attempt $i: controllerPage=$page anonList=$anonymousList anonReset=$anonymousReset login=$login delivery=$delivery"
+            if [[ "$page" == "200" && "$anonymousList" == "403" && "$anonymousReset" == "403" && "$login" == "200" && "$delivery" == "200" ]]; then
+              echo "PASS: owner account page online; account data and resets owner-only; Login and Delivery unaffected"
+              exit 0
+            fi
+            sleep 12
+          done
+          echo "::error::New controller account center not verified on Cloudflare"
+          exit 1
