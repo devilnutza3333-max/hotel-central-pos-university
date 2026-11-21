@@ -100,6 +100,9 @@ try{
     body:JSON.stringify({avatarData:null}),
   });
   assert.equal(unauthorizedPhoto.status,401,"Anonymous photo modification must be rejected");
+  // The Wrangler local D1 filesystem watcher may restart the Worker after the
+  // first profile GET creates the optional table. Let that local restart settle.
+  await sleep(1500);
   const testPng="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j+YcAAAAASUVORK5CYII=";
   const uploadPhoto=await call("/api/account/profile",{
     method:"PUT",headers:{"content-type":"application/json",cookie:studentCookie},
