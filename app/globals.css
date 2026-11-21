@@ -1478,3 +1478,43 @@ button:disabled { cursor:not-allowed; opacity:.5; }
 .pos-profile-success{display:flex;align-items:center;gap:8px;margin:0 22px 22px;padding:12px;border-radius:9px;background:#e5f5ed;color:#096a50;font-size:13px}
 .pos-profile-card>.login-error{margin:10px 22px 20px}
 @media(max-width:560px){.pos-profile-shell{padding:0 0 48px}.pos-profile-card{border:0;border-radius:0;min-height:100vh}.pos-profile-header{padding:12px 16px}.pos-profile-details{padding:18px 16px}.pos-profile-bottom{padding:0 16px 25px}}
+
+/* Restricted owner-only account recovery center. No plaintext password storage. */
+.pos-controller-entry{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;padding:18px;border:1px solid #b1d6ca;background:#f2faf5;border-radius:16px}
+.pos-controller-entry h3{margin:0 0 6px}.pos-controller-entry p{margin:4px 0;color:#4f6f65}
+.pos-controller-entry>a{display:inline-flex;align-items:center;gap:7px;padding:12px 16px;background:#076b56;color:white;border-radius:11px;text-decoration:none;font-size:14px;font-weight:800}
+.pos-controller-shell{min-height:100vh;padding:18px 12px 60px;background:#f4f7f6;display:flex;justify-content:center}
+.pos-controller-card{width:min(920px,100%);background:white;border:1px solid #d8e5e1;border-radius:18px;box-shadow:0 12px 40px #123e3512;overflow:hidden}
+.pos-controller-header{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:15px 24px;border-bottom:1px solid #dfeae6}
+.pos-controller-header>span{display:flex;align-items:center;gap:6px;font-size:13px;font-weight:850;color:#096954}
+.pos-controller-intro{padding:24px 24px 12px}
+.pos-controller-intro h1{font-size:24px;margin:0 0 8px}.pos-controller-intro>p{margin:0 0 13px;color:#547367}
+.pos-controller-notice{display:flex;align-items:flex-start;gap:9px;padding:13px;background:#fdf8ec;border:1px solid #ede0ba;border-radius:11px;font-size:13px;color:#765923}
+.pos-controller-notice svg{flex-shrink:0}
+.pos-controller-tools{display:flex;gap:9px;padding:12px 24px;align-items:center}
+.pos-controller-tools label{display:flex;align-items:center;gap:8px;flex:1;border:1px solid #cbded5;border-radius:10px;padding:0 10px;min-height:46px;color:#2b806b}
+.pos-controller-tools input{flex:1;min-width:0;width:100%;border:0;outline:0;background:transparent;font:inherit;color:#24473e}
+.pos-controller-tools>button{display:flex;align-items:center;gap:7px;border:1px solid #bfdacf;background:#ecf7f2;color:#176a56;padding:12px;border-radius:10px;cursor:pointer}
+.pos-controller-count{padding:0 24px;color:#617e73;font-size:12px}
+.pos-controller-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(310px,1fr));gap:12px;padding:12px 24px 30px}
+.pos-controller-person{border:1px solid #dce7e3;border-radius:13px;padding:14px;display:flex;flex-direction:column;gap:10px;background:#fff}
+.pos-controller-person-title{display:flex;align-items:center;gap:11px}
+.pos-controller-initial{display:grid;place-items:center;flex:0 0 42px;height:42px;border-radius:11px;background:#e7f5ef;color:#137963}
+.pos-controller-person-title>div{display:flex;flex-direction:column;min-width:0;gap:3px}
+.pos-controller-person-title strong{font-size:14px;overflow-wrap:anywhere}.pos-controller-person-title small{font-size:12px;color:#648074}
+.pos-controller-person dl{margin:0;display:grid;gap:5px;font-size:12px}
+.pos-controller-person dl>div{display:flex;gap:10px;justify-content:space-between;align-items:baseline;border-bottom:1px solid #f0f3f1;padding:5px 0}
+.pos-controller-person dt{color:#73877e}.pos-controller-person dd{margin:0;text-align:right;color:#1d5042;overflow-wrap:anywhere;max-width:65%}
+.pos-controller-reset{display:flex;align-items:center;justify-content:center;gap:7px;min-height:43px;background:#0c755f;color:white;border:0;border-radius:9px;font-weight:800;cursor:pointer}
+.pos-controller-reset:disabled{opacity:.55}.pos-controller-self{color:#7b6a42;font-size:12px;line-height:1.5}
+.pos-controller-loading{padding:15px 24px}.pos-controller-forbidden{text-align:center;padding:35px 20px}.pos-controller-forbidden svg{color:#a85b4a}
+.pos-controller-modal-backdrop{position:fixed;z-index:250;inset:0;background:#091d19c2;display:flex;justify-content:center;align-items:center;padding:15px}
+.pos-controller-modal{width:min(480px,100%);background:#fff;border-radius:18px;padding:23px;box-shadow:0 18px 65px #0005}
+.pos-controller-modal-title{display:flex;gap:7px;align-items:center;color:#08735e}.pos-controller-modal-title h2{font-size:20px;margin:0}
+.pos-controller-modal label{display:block;font-size:12px;font-weight:750;color:#446459;margin-top:12px}
+.pos-controller-once{color:#986a30;font-size:13px;font-weight:700}
+.pos-controller-copy{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 12px;border:1px solid #d2e0d9;border-radius:9px;background:#f5fbf8}
+.pos-controller-copy code{font-size:13px;font-weight:800;overflow-wrap:anywhere;user-select:all}
+.pos-controller-copy button{border:0;background:#e3f4ec;color:#096e56;border-radius:8px;padding:11px;cursor:pointer}
+.pos-controller-close{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;min-height:45px;margin-top:15px;background:#206c5b;color:#fff;font-weight:800;border:0;border-radius:10px;cursor:pointer}
+@media(max-width:560px){.pos-controller-shell{padding:0 0 40px}.pos-controller-card{border-radius:0;min-height:100vh;border:0}.pos-controller-header,.pos-controller-intro{padding:15px}.pos-controller-tools{padding:10px 15px}.pos-controller-count{padding:0 15px}.pos-controller-list{grid-template-columns:minmax(0,1fr);padding:10px 15px 30px}}

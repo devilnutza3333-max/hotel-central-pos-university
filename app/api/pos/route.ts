@@ -1791,6 +1791,9 @@ export async function POST(request: Request) {
       const targetId = String(body.userId ?? "");
       const password = String(body.password ?? "");
       if (!validPassword(password)) throw new Error("รหัสผ่านต้องมี 10–128 ตัวอักษร");
+      if (targetId === "pos_mgr_cb5d4d0b40dadedb79c21010") throw new Error("บัญชีผู้ควบคุมระบบหลักไม่อนุญาตให้อาจารย์รีเซ็ตรหัสผ่าน");
+      const [target] = await db.select({ role: users.role }).from(users).where(eq(users.id, targetId)).limit(1);
+      if (target?.role === "instructor") throw new Error("เฉพาะผู้ควบคุมหลักเท่านั้นที่ช่วยรีเซ็ตรหัสผ่านของอาจารย์อื่นได้");
       const [account] = await db.select().from(authAccounts).where(eq(authAccounts.userId, targetId)).limit(1);
       if (!account) throw new Error("ไม่พบบัญชีผู้ใช้");
       const passwordData = await createPasswordHash(password);

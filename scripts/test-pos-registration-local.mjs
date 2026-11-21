@@ -135,6 +135,19 @@ try{
   const rootCookie="hotel_pos_session="+rootToken;
   const approvals=await call("/api/auth/registrations",{headers:{cookie:rootCookie}});
   assert.equal(approvals.status,200,"Approver requests: "+approvals.raw.slice(0,400));
+  const rootAccounts=await call("/api/controller/accounts",{headers:{cookie:rootCookie}});
+  assert.equal(rootAccounts.status,200,"Controller roster: "+rootAccounts.raw.slice(0,400));
+  assert.ok(rootAccounts.body?.accounts?.some(person=>person.username==="0812345670"),"Controller sees student ID and phone");
+  assert.equal(rootAccounts.body.accounts.find(person=>person.username==="0812345670")?.program,"Creative Food");
+  assert.equal(rootAccounts.body.accounts.find(person=>person.username==="0812345670")?.yearLevel,"2");
+  assert.ok(!rootAccounts.raw.includes("passwordHash"),"Never expose password hashes");
+  assert.ok(!rootAccounts.raw.includes("passwordSalt"),"Never expose salts");
+  const blockedStudentRoster=await call("/api/controller/accounts",{headers:{cookie:studentCookie}});
+  assert.equal(blockedStudentRoster.status,403,"Students must not see controller account center");
+  const blockedStudentReset=await post("/api/controller/accounts",{action:"issueTemporaryPassword",userId:"pos_mgr_cb5d4d0b40dadedb79c21010"},{cookie:studentCookie});
+  assert.equal(blockedStudentReset.status,403,"Students must not reset accounts through controller API");
+  console.log("PASS: only original controller can view IDs, registration metadata and account roster");
+
   const teacherRequest=approvals.body?.requests?.find(x=>x.phone==="0822345670");
   assert.ok(teacherRequest,"Teacher request must appear on approval screen");
   const approved=await call("/api/auth/registrations",{method:"PATCH",headers:{"content-type":"application/json",cookie:rootCookie},body:JSON.stringify({userId:teacherRequest.userId,decision:"approve"})});
@@ -161,27 +174,50 @@ try{
   assert.equal(team.body?.profile?.role,"instructor");
   const student=team.body?.users?.find(u=>u.email==="0812345670@local.pos");
   assert.ok(student,"Student should appear in team list");
+  const deniedTeacherRoster=await call("/api/controller/accounts",{headers:{cookie:teacherCookie}});
+  assert.equal(deniedTeacherRoster.status,403,"Approved teachers cannot see boss-only credential desk");
+  const deniedTeacherReset=await post("/api/controller/accounts",{action:"issueTemporaryPassword",userId:student.id},{cookie:teacherCookie});
+  assert.equal(deniedTeacherReset.status,403,"Teachers cannot issue controller recovery credentials");
+  const oldStudentPassword=studentPassword;
+  const reissue=await post("/api/controller/accounts",{action:"issueTemporaryPassword",userId:student.id},{cookie:rootCookie});
+  assert.equal(reissue.status,200,"Controller reissues student password: "+reissue.raw.slice(0,300));
+  assert.ok(reissue.body?.temporaryPassword?.length>=20,"New strong password issued");
+  assert.ok(!reissue.raw.includes("passwordHash"),"No hash exposure on issue");
+  const staleStudentSession=await call("/api/account/profile",{headers:{cookie:studentCookie}});
+  assert.equal(staleStudentSession.status,401,"Password reset revokes student's old session");
+  const invalidOldPassword=await post("/api/auth/login",{username:"0812345670",password:oldStudentPassword});
+  assert.equal(invalidOldPassword.status,401,"Old password stops working");
+  const validNewPassword=await post("/api/auth/login",{username:"0812345670",password:reissue.body.temporaryPassword});
+  assert.equal(validNewPassword.status,200,"Member can sign in with new controller-issued password");
+  const refreshedStudentCookie=cookie(validNewPassword);
+  const postIssueRoster=await call("/api/controller/accounts",{headers:{cookie:rootCookie}});
+  assert.equal(postIssueRoster.status,200);
+  assert.ok(!postIssueRoster.raw.includes(reissue.body.temporaryPassword),"Reissued password shown once, not persisted in roster");
+  const resetRoot=await post("/api/controller/accounts",{action:"issueTemporaryPassword",userId:"pos_mgr_cb5d4d0b40dadedb79c21010"},{cookie:rootCookie});
+  assert.equal(resetRoot.status,403,"Controller account cannot be reset from this panel");
+  console.log("PASS: controller-only one-time credentials, old password invalidated and sessions revoked");
+
   console.log("PASS: initial manager approval grants full instructor role");
 
   const promote=await post("/api/pos",{action:"setRole",userId:student.id,role:"manager",clientRequestId:randomBytes(16).toString("hex")},{cookie:teacherCookie});
   assert.equal(promote.status,200,"Teacher promotion: "+promote.raw.slice(0,400));
   // Promotion must not permit access to the user list: never send roster for any scope.
-  const traineeTeam=await call("/api/pos?scope=team",{headers:{cookie:studentCookie}});
+  const traineeTeam=await call("/api/pos?scope=team",{headers:{cookie:refreshedStudentCookie}});
   assert.equal(traineeTeam.status,403,"Student manager must be blocked from team API");
   assert.equal(traineeTeam.body?.users,undefined,"Forbidden team API must return no user roster");
   for (const scope of ["dashboard","duty","audit"]) {
-    const view=await call("/api/pos?scope="+scope,{headers:{cookie:studentCookie}});
+    const view=await call("/api/pos?scope="+scope,{headers:{cookie:refreshedStudentCookie}});
     assert.equal(view.status,200,"Trainee manager should keep restaurant access for "+scope);
     assert.equal(view.body?.profile?.role,"manager");
     assert.equal(view.body?.users,undefined,"No roster must be exposed to trainee via "+scope);
   }
-  const studentManagement=await call("/api/pos?scope=dashboard",{headers:{cookie:studentCookie}});
+  const studentManagement=await call("/api/pos?scope=dashboard",{headers:{cookie:refreshedStudentCookie}});
   assert.equal(studentManagement.body?.profile?.role,"manager");
   const controllerTeam=await call("/api/pos?scope=team",{headers:{cookie:rootCookie}});
   assert.equal(controllerTeam.status,200,"Original controller must retain team visibility");
   assert.ok(controllerTeam.body?.users?.some(user=>user.id===student.id),"Controller sees user roster");
   console.log("PASS: trainee manager denied team roster from all scopes; instructor and controller retain access");
-  const forbidden=await call("/api/auth/registrations",{headers:{cookie:studentCookie}});
+  const forbidden=await call("/api/auth/registrations",{headers:{cookie:refreshedStudentCookie}});
   assert.equal(forbidden.status,403,"Student trainee manager must not approve teachers");
   console.log("PASS: instructor assigns student as trainee manager; trainee cannot grant teacher role");
 
@@ -190,12 +226,12 @@ try{
   console.log("PASS: instructor can restore original student role");
 
   const signedOut=await call("/api/auth/logout",{
-    method:"POST",headers:{cookie:studentCookie,origin:BASE},
+    method:"POST",headers:{cookie:refreshedStudentCookie,origin:BASE},
     redirect:"manual",
   });
   assert.equal(signedOut.status,303,"Logout POST should redirect to login");
   assert.ok(signedOut.headers.get("location")?.endsWith("/login"));
-  const loggedOut=await call("/api/account/profile",{headers:{cookie:studentCookie}});
+  const loggedOut=await call("/api/account/profile",{headers:{cookie:refreshedStudentCookie}});
   assert.equal(loggedOut.status,401,"Logout must revoke current session");
   console.log("PASS: member Logout invalidates session and redirects to Login");
   console.log("ALL POS REGISTRATION, PROFILE PHOTO AND LOGOUT TESTS PASSED ON LOCAL D1 — no production changes");
